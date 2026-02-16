@@ -1,10 +1,12 @@
-const CACHE_NAME = 'vlink-v1';
+const CACHE_NAME = 'vlink-v2'; // Incremented version to refresh user caches
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/app.js',
-  '/manifest.json',
+  './',
+  './index.html',
+  './style.css',
+  './app.js',
+  './manifest.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
   'https://cdn.jsdelivr.net/npm/idb@8/build/umd.js'
 ];
 
@@ -12,7 +14,7 @@ const ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('VLink: Caching App Shell');
+      console.log('VLink: Caching App Shell and Icons');
       return cache.addAll(ASSETS);
     })
   );

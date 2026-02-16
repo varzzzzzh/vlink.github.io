@@ -81,11 +81,13 @@ fileInput.addEventListener('change', (e) => {
     reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
+            // Processing happens in background
             canvas.width = 100;
             canvas.height = 100;
             ctx.drawImage(img, 0, 0, 100, 100);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.3);
-            sizeReport.innerText = `Compressed String Length: ${dataUrl.length} characters`;
+            
+            // UI Feedback
+            sizeReport.innerText = "Image compressed and ready for encryption.";
             packetList.innerHTML = ""; 
         };
         img.src = event.target.result;
@@ -95,12 +97,13 @@ fileInput.addEventListener('change', (e) => {
 
 chunkBtn.addEventListener('click', async () => {
     const password = document.getElementById('secret-key')?.value;
-    if (!password) return alert("Enter a password to encrypt!");
+    if (!password) return alert("Please set a Security Password first!");
     if (!canvas.width) return alert("Please select an image first!");
 
+    sizeReport.innerText = "Securing data...";
+    
     let dataToProcess = canvas.toDataURL('image/jpeg', 0.3);
     
-    sizeReport.innerText = "Encrypting...";
     try {
         dataToProcess = await encryptData(dataToProcess, password);
     } catch (err) {
@@ -116,7 +119,7 @@ chunkBtn.addEventListener('click', async () => {
     }
 
     const totalPackets = chunks.length;
-    packetList.innerHTML = `<h3>VLink Encrypted Packets (${totalPackets}):</h3>`;
+    packetList.innerHTML = `<h4 style="color:#007AFF;">Generated ${totalPackets} Secure Packets:</h4>`;
 
     const finalizedPackets = chunks.map((data, index) => {
         const seq = (index + 1).toString().padStart(2, '0');
@@ -124,21 +127,26 @@ chunkBtn.addEventListener('click', async () => {
         return `VLINK|ID:${transmissionId}|SEQ:${seq}|TOT:${tot}|DATA:${data}`;
     });
 
-    finalizedPackets.forEach((packet) => {
+    finalizedPackets.forEach((packet, index) => {
         const div = document.createElement('div');
-        div.style.cssText = "background: #f4f4f4; margin: 10px 0; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 11px; word-break: break-all; border-left: 4px solid #007AFF;";
+        div.style.cssText = "background: #fff; margin: 8px 0; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 11px; word-break: break-all; border: 1px solid #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.05);";
+        
         const smsHref = `sms:?body=${encodeURIComponent(packet)}`;
+        
         div.innerHTML = `
-            <strong>Packet:</strong><br>${packet}<br>
-            <div style="margin-top:10px; display:flex; gap:10px;">
-                <button onclick="navigator.clipboard.writeText('${packet}')">Copy</button>
-                <a href="${smsHref}" style="text-decoration:none; background:#28a745; color:white; padding:5px 10px; border-radius:3px; font-size:10px;">Send SMS</a>
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px; color:#666;">
+                <strong>Packet ${index + 1} of ${totalPackets}</strong>
+            </div>
+            <code style="display:block; background:#f8f9fa; padding:5px; border-radius:4px; margin-bottom:10px;">${packet}</code>
+            <div style="display:flex; gap:8px;">
+                <button style="flex:1; padding:8px;" onclick="navigator.clipboard.writeText('${packet}')">Copy Code</button>
+                <a href="${smsHref}" style="flex:1; text-align:center; text-decoration:none; background:#28a745; color:white; padding:8px; border-radius:4px; font-size:11px;">Send via SMS</a>
             </div>
         `;
         packetList.appendChild(div);
         savePacketToDB(packet, transmissionId);
     });
-    sizeReport.innerText = "Complete. Encrypted Packets Ready.";
+    sizeReport.innerText = "Encryption complete. Send packets below.";
 });
 
 // ==========================================
@@ -146,10 +154,10 @@ chunkBtn.addEventListener('click', async () => {
 // ==========================================
 importBtn.addEventListener('click', async () => {
     const password = document.getElementById('secret-key')?.value;
-    if (!password) return alert("Enter the password to decrypt!");
+    if (!password) return alert("Enter the security password to decrypt!");
     
     const rawData = importInput.value.trim();
-    if (!rawData.startsWith('VLINK|')) return alert("Invalid Packet");
+    if (!rawData.startsWith('VLINK|')) return alert("Please paste a valid VLink packet.");
 
     const parts = rawData.split('|');
     const tId = parts[1].split(':')[1];
@@ -161,30 +169,35 @@ importBtn.addEventListener('click', async () => {
     reassemblyBuffer[tId][seq - 1] = data;
 
     const receivedCount = reassemblyBuffer[tId].filter(x => x !== null).length;
-    assemblyProgress.innerText = `Received ${receivedCount} of ${tot} packets for ID: ${tId}`;
+    assemblyProgress.innerText = `Received ${receivedCount} of ${tot} packets.`;
 
     if (receivedCount === tot) {
         try {
-            assemblyProgress.innerText = "All packets received. Decrypting...";
+            assemblyProgress.innerText = "Finalizing secure reassembly...";
             const encryptedFull = reassemblyBuffer[tId].join('');
             const decryptedBase64 = await decryptData(encryptedFull, password);
             
             const img = document.createElement('img');
             img.src = decryptedBase64;
-            img.style.width = "200px";
-            img.style.border = "2px solid #28a745";
+            img.style.width = "100%";
+            img.style.borderRadius = "8px";
+            img.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
             
-            reconstructedContainer.innerHTML = "<h4>Decrypted Image:</h4>";
+            reconstructedContainer.innerHTML = "<h4 style='color:#28a745;'>Message Decrypted:</h4>";
             reconstructedContainer.appendChild(img);
             delete reassemblyBuffer[tId];
+            assemblyProgress.innerText = "Success! Image recovered.";
         } catch (err) {
-            alert(err.message);
-            assemblyProgress.innerText = "Decryption Failed.";
+            alert("Security Error: " + err.message);
+            assemblyProgress.innerText = "Decryption Failed. Incorrect password?";
         }
     }
-    importInput.value = "";
+    importInput.value = ""; // Clear for next packet
 });
 
+// ==========================================
+// 6. UTILITY FUNCTIONS
+// ==========================================
 async function savePacketToDB(packet, tId) {
     if (!db) return;
     const tx = db.transaction('chunks', 'readwrite');
@@ -195,4 +208,25 @@ async function savePacketToDB(packet, tId) {
     });
     await tx.done;
 }
-//hello world
+
+// Reset functions
+const clearAll = () => {
+    reassemblyBuffer = {};
+    reconstructedContainer.innerHTML = "";
+    assemblyProgress.innerText = "";
+    importInput.value = "";
+};
+
+document.getElementById('reset-receiver').addEventListener('click', () => {
+    clearAll();
+    assemblyProgress.innerText = "Receiver memory cleared.";
+});
+
+// Register Service Worker for Offline Mode
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('Offline system ready.'))
+      .catch(err => console.log('Offline system error.', err));
+  });
+}
