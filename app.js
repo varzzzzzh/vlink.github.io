@@ -7,12 +7,18 @@ let activeFriend = null;
 let friends = JSON.parse(localStorage.getItem('vlink_friends')) || [];
 
 async function initDB() {
+    // Basic initialization for future persistent storage
     if (typeof idb !== 'undefined') {
         db = await idb.openDB('VLinkDB', 1, {
-            upgrade(db) { db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true }); },
+            upgrade(db) { 
+                if (!db.objectStoreNames.contains('messages')) {
+                    db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true }); 
+                }
+            },
         });
     }
     renderFriends();
+    updateStatus();
 }
 initDB();
 
@@ -30,15 +36,24 @@ function renderFriends() {
     const list = document.getElementById('friends-list');
     if (!list) return;
     list.innerHTML = '';
+    
     friends.forEach(f => {
         const div = document.createElement('div');
-        div.className = `server-icon ${activeFriend?.id === f.id ? 'active' : ''}`;
+        // If active, add the 'active' class
+        const isActive = activeFriend?.id === f.id;
+        div.className = `server-icon ${isActive ? 'active' : ''}`;
         div.innerText = f.name[0].toUpperCase();
+        
+        // Add a small online/offline status dot inside the icon
+        const dot = document.createElement('span');
+        dot.className = `status-dot ${navigator.onLine ? 'online' : ''}`;
+        div.appendChild(dot);
+
         div.onclick = () => {
             activeFriend = f;
             document.getElementById('chat-target').innerText = `@${f.name}`;
             renderFriends();
-            addMessage(`Switched to ${f.name}`, "system");
+            addMessage(`Secure session started with ${f.name}`, "system");
         };
         list.appendChild(div);
     });
@@ -46,7 +61,7 @@ function renderFriends() {
 
 document.getElementById('add-friend-btn').onclick = () => {
     const name = prompt("Friend Name:");
-    const phone = prompt("Phone Number (+91...):");
+    const phone = prompt("Phone Number (with country code, e.g., +91...):");
     if (name && phone) {
         friends.push({ id: Date.now(), name, phone });
         localStorage.setItem('vlink_friends', JSON.stringify(friends));
@@ -55,7 +70,7 @@ document.getElementById('add-friend-btn').onclick = () => {
 };
 
 // ==========================================
-// 3. CRYPTOGRAPHY
+// 3. CRYPTOGRAPHY (AES-GCM)
 // ==========================================
 async function getEncryptionKey(password) {
     const enc = new TextEncoder();
@@ -85,13 +100,15 @@ async function decryptData(base64Data, password) {
 // ==========================================
 // 4. SENDING LOGIC (SMS Handover)
 // ==========================================
+
 async function startSmsHandover(data, isImage = false) {
     const password = secretKeyInput.value;
-    if (!password || !activeFriend) return alert("Select a friend and set passcode!");
+    if (!password) return alert("Please enter a Passcode for encryption!");
+    if (!activeFriend) return alert("Select a friend from the sidebar first!");
 
     let encrypted = await encryptData(data, password);
     
-    // ChunkSize 2000 works best for long-distance Indian carriers
+    // ChunkSize 2000 for standard mobile carrier limits
     const chunkSize = 2000; 
     const tId = Math.floor(Math.random() * 900) + 100;
     const packets = [];
@@ -106,13 +123,13 @@ async function startSmsHandover(data, isImage = false) {
     packetCounter.classList.remove('hidden');
     
     const updateBadge = () => {
-        packetCounter.innerText = `Send Part ${idx + 1}/${packets.length} to ${activeFriend.name}`;
+        packetCounter.innerText = `Part ${idx + 1}/${packets.length} - Tap to Send`;
         packetCounter.onclick = () => {
             window.location.href = `sms:${activeFriend.phone}?body=${encodeURIComponent(packets[idx])}`;
             idx++;
             if (idx < packets.length) updateBadge();
             else {
-                packetCounter.innerText = "All Sent ✓";
+                packetCounter.innerText = "Transmission Ready ✓";
                 setTimeout(() => packetCounter.classList.add('hidden'), 3000);
             }
         };
@@ -132,7 +149,7 @@ function addMessage(content, type = 'sent', isImage = false) {
         img.style.maxWidth = "100%"; 
         img.style.borderRadius = "8px";
         img.style.cursor = "zoom-in";
-        img.onclick = () => openViewer(content); // Open full view on click
+        img.onclick = () => openViewer(content);
         div.appendChild(img);
     } else { 
         div.innerText = content; 
@@ -141,7 +158,6 @@ function addMessage(content, type = 'sent', isImage = false) {
     chatThread.scrollTop = chatThread.scrollHeight;
 }
 
-// ZOOM & VIEWER LOGIC
 let currentZoom = 1;
 const viewer = document.getElementById('image-viewer');
 const fullImg = document.getElementById('full-image');
@@ -150,8 +166,7 @@ function openViewer(src) {
     if(!viewer) return;
     viewer.style.display = "flex";
     fullImg.src = src;
-    currentZoom = 1;
-    fullImg.style.transform = `scale(1)`;
+    resetZoom();
 }
 
 window.adjustZoom = (delta) => {
@@ -170,11 +185,16 @@ if(document.querySelector('.close-viewer')) {
 }
 
 // ==========================================
-// 6. RECEIVING LOGIC
+// 6. RECEIVING LOGIC (Reassembly)
 // ==========================================
+
 async function processIncoming(rawData) {
     const password = secretKeyInput.value;
     if (!rawData.startsWith('VLINK|')) return;
+    if (!password) {
+        addMessage("Incoming packet detected. Enter passcode to decrypt.", "system");
+        return;
+    }
 
     const parts = rawData.split('|');
     const tId = parts[1].split(':')[1];
@@ -185,23 +205,27 @@ async function processIncoming(rawData) {
     if (!reassemblyBuffer[tId]) reassemblyBuffer[tId] = new Array(tot).fill(null);
     reassemblyBuffer[tId][seq - 1] = data;
 
-    const received = reassemblyBuffer[tId].filter(x => x !== null).length;
-    addMessage(`Packet ${received}/${tot} received...`, 'system');
+    const receivedCount = reassemblyBuffer[tId].filter(x => x !== null).length;
+    addMessage(`Receiving part ${receivedCount}/${tot}...`, 'system');
 
-    if (received === tot) {
+    if (receivedCount === tot) {
         try {
             const decrypted = await decryptData(reassemblyBuffer[tId].join(''), password);
             addMessage(decrypted, 'received', decrypted.startsWith('data:image'));
             if ("vibrate" in navigator) navigator.vibrate([100, 50, 100]);
             delete reassemblyBuffer[tId];
-        } catch (e) { addMessage("Decryption failed!", "system"); }
+        } catch (e) { 
+            addMessage("Decryption failed. Check passcode.", "system"); 
+        }
     }
     importInput.value = "";
 }
 
 // ==========================================
-// 7. EVENT LISTENERS
+// 7. EVENT LISTENERS & MANAGEMENT
 // ==========================================
+
+// Send Text
 document.getElementById('chunk-btn').onclick = () => {
     if (importInput.value.trim()) { 
         startSmsHandover(importInput.value.trim()); 
@@ -209,29 +233,25 @@ document.getElementById('chunk-btn').onclick = () => {
     }
 };
 
+// Process File (Image Processing for Notes)
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    addMessage("Enhancing text for study notes...", "system");
+    addMessage("Processing notes for high-contrast...", "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 800; // Optimal for notes
+            const MAX_WIDTH = 800;
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
 
             const ctx = canvas.getContext('2d');
-            
-            // Grayscale + Contrast filter makes text pop
-            ctx.filter = 'grayscale(1) contrast(1.2)';
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            
+            ctx.filter = 'grayscale(1) contrast(1.2)'; // Enhances text visibility
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
             const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.2); 
@@ -242,45 +262,71 @@ fileInput.onchange = (e) => {
     reader.readAsDataURL(file);
 };
 
+// Paste/Receive Handler
 importInput.addEventListener('input', (e) => {
     if (e.target.value.startsWith('VLINK|')) processIncoming(e.target.value.trim());
 });
 
+// QR Logic
 document.getElementById('show-qr-btn').onclick = () => {
     const qr = document.getElementById('qrcode');
     qr.style.display = qr.style.display === 'none' ? 'block' : 'none';
     if (qr.innerHTML === "") new QRCode(qr, { text: window.location.href, width: 128, height: 128 });
 };
 
-document.getElementById('reset-receiver').onclick = () => {
-    chatThread.innerHTML = '<div class="message system">History cleared.</div>';
+// MANAGEMENT: Delete User
+document.getElementById('delete-friend-btn').onclick = () => {
+    if (!activeFriend) return alert("Select a user to delete first.");
+    if (confirm(`Delete ${activeFriend.name} and all data?`)) {
+        friends = friends.filter(f => f.id !== activeFriend.id);
+        localStorage.setItem('vlink_friends', JSON.stringify(friends));
+        activeFriend = null;
+        document.getElementById('chat-target').innerText = "Select a Friend";
+        chatThread.innerHTML = '<div class="message system">User removed.</div>';
+        renderFriends();
+    }
 };
 
-// Download Button Logic
+// MANAGEMENT: Clear Current Chat View
+document.getElementById('clear-chat-btn').onclick = () => {
+    if (confirm("Clear chat thread? This won't delete saved settings.")) {
+        chatThread.innerHTML = '<div class="message system">View cleared.</div>';
+    }
+};
+
+// MANAGEMENT: Total Reset (Wipe All)
+document.getElementById('reset-receiver').onclick = () => {
+    if (confirm("DANGER: Wipe all friends and settings? This cannot be undone.")) {
+        localStorage.clear();
+        indexedDB.deleteDatabase("VLinkDB"); 
+        location.reload();
+    }
+};
+
+// Utility: Download View
 const dlBtn = document.getElementById('download-btn');
 if(dlBtn) {
     dlBtn.onclick = () => {
         const link = document.createElement('a');
         link.href = fullImg.src;
-        link.download = `VLink_Note_${Date.now()}.jpg`;
+        link.download = `VLink_Doc_${Date.now()}.jpg`;
         link.click();
     };
 }
 
-// Add this inside renderFriends()
-const statusDot = f.id === activeFriend?.id ? '<span class="status-dot online"></span>' : '';
-
-// Update the Status bar based on connection
+// Connection Status Handling
 window.addEventListener('online', updateStatus);
 window.addEventListener('offline', updateStatus);
 
 function updateStatus() {
     const statusEl = document.getElementById('status');
+    if (!statusEl) return;
     if (navigator.onLine) {
-        statusEl.innerHTML = "● Online Mode (Cloud Sync Enabled)";
+        statusEl.innerHTML = "● Online (P2P Ready)";
         statusEl.style.color = "#23a559";
     } else {
-        statusEl.innerHTML = "● Offline Mode (SMS Protocol Active)";
+        statusEl.innerHTML = "● Offline (SMS Protocol Only)";
         statusEl.style.color = "#f23f43";
     }
+    renderFriends(); // Re-render to update status dots
 }

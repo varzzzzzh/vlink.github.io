@@ -16,10 +16,17 @@
            CORE DARK THEME & LAYOUT
            ========================================== */
         :root {
-            --bg-sidebar: #1e1f22; --bg-friends: #2b2d31; --bg-chat: #313338;
-            --text-main: #dbdee1; --text-muted: #949ba4;
-            --accent-blue: #5865f2; --accent-green: #23a559;
-            --bg-input: #383a40; --bubble-sent: #4752c4; --bubble-received: #3e4047;
+            --bg-sidebar: #1e1f22; 
+            --bg-friends: #2b2d31; 
+            --bg-chat: #313338;
+            --text-main: #dbdee1; 
+            --text-muted: #949ba4;
+            --accent-blue: #5865f2; 
+            --accent-green: #23a559;
+            --accent-red: #da373c;
+            --bg-input: #383a40; 
+            --bubble-sent: #4752c4; 
+            --bubble-received: #3e4047;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
@@ -32,7 +39,7 @@
         }
 
         #app-wrapper { 
-            display: flex; /* This makes sidebar and chat sit side-by-side */
+            display: flex; 
             height: 100vh; 
             width: 100vw; 
         }
@@ -45,22 +52,35 @@
             flex-direction: column; 
             align-items: center; 
             padding: 12px 0; 
-            gap: 8px; 
+            gap: 12px; 
             flex-shrink: 0;
+            border-right: 1px solid rgba(0,0,0,0.2);
         }
 
         .server-icon { 
             width: 48px; height: 48px; background: var(--bg-chat); border-radius: 50%; 
             display: flex; align-items: center; justify-content: center; cursor: pointer; 
             transition: 0.2s; color: var(--accent-blue); font-weight: bold; font-size: 18px;
+            position: relative;
         }
         
         .server-icon.active { border-radius: 16px; background: var(--accent-blue); color: white; }
         
-        #add-friend-btn {
+        .sidebar-btn {
             width: 48px; height: 48px; border-radius: 50%; background: var(--bg-chat);
             border: none; color: var(--accent-green); font-size: 24px; cursor: pointer;
+            transition: 0.2s;
         }
+
+        .sidebar-btn:hover { border-radius: 16px; background: var(--accent-green); color: white; }
+        
+        .sidebar-btn.delete-btn {
+            margin-top: auto; /* Pushes the delete button to the bottom */
+            color: var(--accent-red);
+            font-size: 20px;
+        }
+
+        .sidebar-btn.delete-btn:hover { background: var(--accent-red); color: white; }
 
         /* MAIN CHAT AREA */
         #chat-app { 
@@ -86,7 +106,7 @@
         .message { max-width: 80%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.4; }
         .message.sent { align-self: flex-end; background: var(--bubble-sent); color: white; border-bottom-right-radius: 2px; }
         .message.received { align-self: flex-start; background: var(--bubble-received); border-bottom-left-radius: 2px; }
-        .message.system { align-self: center; background: transparent; color: var(--text-muted); font-size: 11px; }
+        .message.system { align-self: center; background: transparent; color: var(--text-muted); font-size: 11px; text-align: center; }
 
         /* INPUT AREA */
         .chat-input-area { padding: 10px 16px 20px 16px; display: flex; gap: 12px; align-items: center; background: var(--bg-chat); }
@@ -99,7 +119,28 @@
         .attach-btn, .send-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; }
         .send-btn { color: var(--accent-blue); }
 
-        /* IMAGE VIEWER MODAL */
+        /* UTILITY BAR */
+        .util-bar {
+            position: absolute;
+            bottom: 4px;
+            right: 8px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .util-link {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 10px;
+            cursor: pointer;
+            opacity: 0.5;
+            transition: 0.2s;
+        }
+
+        .util-link:hover { opacity: 1; color: var(--accent-red); }
+
+        /* MODALS */
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: none; flex-direction: column; z-index: 1000; }
         .modal-content-wrapper { flex: 1; display: flex; justify-content: center; align-items: center; }
         .modal-content { max-width: 95%; max-height: 80%; transition: transform 0.2s; }
@@ -110,39 +151,43 @@
         /* MOBILE OPTIMIZATION */
         @media (max-width: 600px) {
             .sidebar { width: 60px; }
-            .server-icon { width: 40px; height: 40px; }
-            #import-input { font-size: 16px; } /* Prevents iOS Zoom */
+            .server-icon, .sidebar-btn { width: 40px; height: 40px; }
+            #import-input { font-size: 16px; } 
             .message { max-width: 90%; }
         }
 
         .hidden { display: none; }
-        #packet-counter { position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%); background: var(--accent-blue); padding: 4px 12px; border-radius: 20px; font-size: 12px; cursor: pointer; }
+        #packet-counter { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--accent-blue); padding: 6px 14px; border-radius: 20px; font-size: 12px; cursor: pointer; color: white; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
     </style>
 </head>
 <body>
     <div id="app-wrapper">
         <nav class="sidebar">
-            <div class="server-icon active">VL</div>
-            <div id="friends-list"></div>
-            <button id="add-friend-btn">+</button>
+            <div class="server-icon active" title="VLink Home">VL</div>
+            
+            <div id="friends-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+            
+            <button id="add-friend-btn" class="sidebar-btn" title="Add Friend">+</button>
+            
+            <button id="delete-friend-btn" class="sidebar-btn delete-btn" title="Delete Selected Friend">×</button>
         </nav>
 
         <main id="chat-app">
             <header class="chat-header">
                 <div class="header-main">
-                    <h2 id="chat-target">VLink Secure</h2>
-                    <div id="status" style="font-size: 10px; color: var(--accent-green);">● Offline Protocol Active</div>
+                    <h2 id="chat-target" style="font-size: 16px;">VLink Secure</h2>
+                    <div id="status" style="font-size: 10px; color: var(--accent-green);">● Secure Protocol Active</div>
                 </div>
                 <div class="header-actions" style="display: flex; gap: 8px;">
                     <input type="password" id="secret-key" placeholder="Passcode" style="width: 80px; background: #1e1f22; border: 1px solid #4e5058; color: white; border-radius: 4px; padding: 2px 5px; font-size: 11px;">
-                    <button id="show-qr-btn" style="background:none; border:none; color:white; font-size: 12px;">QR</button>
+                    <button id="show-qr-btn" style="background:none; border:none; color:white; font-size: 12px; cursor: pointer;">QR</button>
                 </div>
             </header>
 
-            <div id="qrcode" style="display:none;"></div>
+            <div id="qrcode" style="display:none; padding: 20px; background: white; margin: 10px; border-radius: 8px; align-self: center;"></div>
 
             <div id="chat-thread">
-                <div class="message system">Tap "+" to add a friend's phone number.</div>
+                <div class="message system">Welcome. Select a friend to start a secure SMS handover.</div>
             </div>
 
             <footer class="chat-input-area">
@@ -153,17 +198,18 @@
                 </label>
                 <input type="file" id="file-input" accept="image/*" style="display: none;">
 
-                <textarea id="import-input" placeholder="Message or paste..."></textarea>
+                <textarea id="import-input" placeholder="Message or paste packet..."></textarea>
                 
                 <button id="chunk-btn" class="send-btn">
                     <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                 </button>
             </footer>
-        </main>
-    </div>
 
-    <div style="position: absolute; bottom: 5px; right: 5px; font-size: 10px; opacity: 0.5;">
-        <button id="reset-receiver" style="background:none; border:none; color:red;">Clear</button>
+            <div class="util-bar">
+                <button id="clear-chat-btn" class="util-link">Clear View</button>
+                <button id="reset-receiver" class="util-link">Wipe All History</button>
+            </div>
+        </main>
     </div>
 
     <div id="image-viewer" class="modal">
