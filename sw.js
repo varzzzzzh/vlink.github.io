@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vlink-discord-v4'; // Incremented for Sidebar & P2P update
+const CACHE_NAME = 'vlink-student-v5'; // Incremented for Zoom & Offline fix
 
 const ASSETS = [
   './',
@@ -8,23 +8,24 @@ const ASSETS = [
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  // External Libraries
+  // Libraries must be cached to work offline
   'https://cdn.jsdelivr.net/npm/idb@8/build/umd.js',
   'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
 ];
 
-// 1. Install: Force cache all essential files
+// 1. INSTALL: Pre-cache everything
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('VLink: Caching Discord UI & Security Modules');
+      console.log('VLink: Preparing Offline Classroom Mode');
+      // Using cache.addAll to ensure everything is saved
       return cache.addAll(ASSETS);
     })
   );
 });
 
-// 2. Activate: Wipe out old versions to save phone storage
+// 2. ACTIVATE: Clean up old storage
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -36,26 +37,32 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// 3. Fetch: "Stale-While-Revalidate" Strategy
-// Loads instantly from cache, but updates the cache in the background if online.
+// 3. FETCH: True Offline-First Strategy
+// This logic ensures students can open the app with 0.00kb of data.
 self.addEventListener('fetch', (event) => {
   event.respondWith(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.match(event.request).then((response) => {
-        const fetchPromise = fetch(event.request).then((networkResponse) => {
-          // Update the cache with the new version from network
-          if (networkResponse.status === 200) {
-            cache.put(event.request, networkResponse.clone());
-          }
+    caches.match(event.request).then((cachedResponse) => {
+      // 1. Return cached file immediately if found
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
+      // 2. If not in cache, try to get it from network
+      return fetch(event.request).then((networkResponse) => {
+        // Optional: Cache new resources on the fly
+        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
           return networkResponse;
-        }).catch(() => {
-          // Fallback if network fails completely (Offline Mode)
-          console.log("VLink: Running in full offline mode.");
+        }
+
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseToCache);
         });
 
-        // Return the cached version immediately (speed), 
-        // while fetchPromise updates it in the background
-        return response || fetchPromise;
+        return networkResponse;
+      }).catch(() => {
+        // 3. FAILSAFE: If offline and not in cache, show nothing or a generic page
+        console.log("VLink: Resource unavailable offline.");
       });
     })
   );

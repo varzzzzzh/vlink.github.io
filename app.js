@@ -83,7 +83,7 @@ async function decryptData(base64Data, password) {
 }
 
 // ==========================================
-// 4. SENDING LOGIC (Optimized for 3-5 Packets)
+// 4. SENDING LOGIC (SMS Handover)
 // ==========================================
 async function startSmsHandover(data, isImage = false) {
     const password = secretKeyInput.value;
@@ -91,7 +91,7 @@ async function startSmsHandover(data, isImage = false) {
 
     let encrypted = await encryptData(data, password);
     
-    // INCREASED CHUNK SIZE: Modern phones handle ~1200 characters well
+    // ChunkSize 2000 works best for long-distance Indian carriers
     const chunkSize = 2000; 
     const tId = Math.floor(Math.random() * 900) + 100;
     const packets = [];
@@ -106,7 +106,7 @@ async function startSmsHandover(data, isImage = false) {
     packetCounter.classList.remove('hidden');
     
     const updateBadge = () => {
-        packetCounter.innerText = `Send Part ${idx + 1}/${packets.length} to SMS`;
+        packetCounter.innerText = `Send Part ${idx + 1}/${packets.length} to ${activeFriend.name}`;
         packetCounter.onclick = () => {
             window.location.href = `sms:${activeFriend.phone}?body=${encodeURIComponent(packets[idx])}`;
             idx++;
@@ -121,7 +121,7 @@ async function startSmsHandover(data, isImage = false) {
 }
 
 // ==========================================
-// 5. UI HELPERS & RECEIVER
+// 5. UI HELPERS & IMAGE VIEWER
 // ==========================================
 function addMessage(content, type = 'sent', isImage = false) {
     const div = document.createElement('div');
@@ -131,6 +131,8 @@ function addMessage(content, type = 'sent', isImage = false) {
         img.src = content;
         img.style.maxWidth = "100%"; 
         img.style.borderRadius = "8px";
+        img.style.cursor = "zoom-in";
+        img.onclick = () => openViewer(content); // Open full view on click
         div.appendChild(img);
     } else { 
         div.innerText = content; 
@@ -139,6 +141,37 @@ function addMessage(content, type = 'sent', isImage = false) {
     chatThread.scrollTop = chatThread.scrollHeight;
 }
 
+// ZOOM & VIEWER LOGIC
+let currentZoom = 1;
+const viewer = document.getElementById('image-viewer');
+const fullImg = document.getElementById('full-image');
+
+function openViewer(src) {
+    if(!viewer) return;
+    viewer.style.display = "flex";
+    fullImg.src = src;
+    currentZoom = 1;
+    fullImg.style.transform = `scale(1)`;
+}
+
+window.adjustZoom = (delta) => {
+    currentZoom += delta;
+    if (currentZoom < 0.5) currentZoom = 0.5;
+    fullImg.style.transform = `scale(${currentZoom})`;
+};
+
+window.resetZoom = () => {
+    currentZoom = 1;
+    fullImg.style.transform = `scale(1)`;
+};
+
+if(document.querySelector('.close-viewer')) {
+    document.querySelector('.close-viewer').onclick = () => viewer.style.display = "none";
+}
+
+// ==========================================
+// 6. RECEIVING LOGIC
+// ==========================================
 async function processIncoming(rawData) {
     const password = secretKeyInput.value;
     if (!rawData.startsWith('VLINK|')) return;
@@ -167,7 +200,7 @@ async function processIncoming(rawData) {
 }
 
 // ==========================================
-// 6. LISTENERS
+// 7. EVENT LISTENERS
 // ==========================================
 document.getElementById('chunk-btn').onclick = () => {
     if (importInput.value.trim()) { 
@@ -176,36 +209,32 @@ document.getElementById('chunk-btn').onclick = () => {
     }
 };
 
-// ULTRA-LIGHT IMAGE COMPRESSION
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    addMessage("Optimizing notes for long-distance send...", "system");
+    addMessage("Enhancing text for study notes...", "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            
-            // 800px is the "Magic Number" for reading handwritten notes
-            const MAX_WIDTH = 800; 
+            const MAX_WIDTH = 800; // Optimal for notes
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
 
             const ctx = canvas.getContext('2d');
             
-            // Sharpening for text readability
+            // Grayscale + Contrast filter makes text pop
+            ctx.filter = 'grayscale(1) contrast(1.2)';
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
             
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-            // 0.2 quality is enough for B&W or notebook paper text
             const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.2); 
-            
             startSmsHandover(compressedDataUrl, true);
         };
         img.src = event.target.result;
@@ -226,3 +255,32 @@ document.getElementById('show-qr-btn').onclick = () => {
 document.getElementById('reset-receiver').onclick = () => {
     chatThread.innerHTML = '<div class="message system">History cleared.</div>';
 };
+
+// Download Button Logic
+const dlBtn = document.getElementById('download-btn');
+if(dlBtn) {
+    dlBtn.onclick = () => {
+        const link = document.createElement('a');
+        link.href = fullImg.src;
+        link.download = `VLink_Note_${Date.now()}.jpg`;
+        link.click();
+    };
+}
+
+// Add this inside renderFriends()
+const statusDot = f.id === activeFriend?.id ? '<span class="status-dot online"></span>' : '';
+
+// Update the Status bar based on connection
+window.addEventListener('online', updateStatus);
+window.addEventListener('offline', updateStatus);
+
+function updateStatus() {
+    const statusEl = document.getElementById('status');
+    if (navigator.onLine) {
+        statusEl.innerHTML = "● Online Mode (Cloud Sync Enabled)";
+        statusEl.style.color = "#23a559";
+    } else {
+        statusEl.innerHTML = "● Offline Mode (SMS Protocol Active)";
+        statusEl.style.color = "#f23f43";
+    }
+}

@@ -1,183 +1,95 @@
-body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background-color: #202225;
-    height: 100vh;
-    overflow: hidden;
-}
-
-#app-wrapper {
-    display: flex;
-    height: 100vh;
-    width: 100vw;
-}
-
-/* Sidebar */
-.sidebar {
-    width: 72px;
-    background: #202225;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding-top: 15px;
-    gap: 12px;
-    flex-shrink: 0;
-}
-
-.server-icon {
-    width: 48px;
-    height: 48px;
-    background: #36393f;
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-weight: bold;
-    transition: 0.2s;
-}
-
-.server-icon.active, .server-icon:hover {
-    background: #5865f2;
-    border-radius: 15px;
-}
-
-/* Chat Main */
-#chat-app {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    background: #36393f;
-    position: relative;
-}
-
-.chat-header {
-    background: #2f3136;
-    color: white;
-    padding: 10px 16px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #202225;
-}
-
-#chat-thread {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-/* Messages */
-.message {
-    max-width: 80%;
-    padding: 10px;
-    border-radius: 8px;
-    color: #dcddde;
-    background: #4f545c;
-    word-break: break-all;
-}
-
-.message.sent { align-self: flex-end; background: #005c4b; }
-.message.received { align-self: flex-start; background: #32353b; }
-.message.system { align-self: center; background: none; font-size: 11px; color: #72767d; }
-
-/* Input Bar */
-.chat-input-area {
-    padding: 15px;
-    background: #36393f;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-#import-input {
-    flex: 1;
-    background: #40444b;
-    border: none;
-    border-radius: 8px;
-    padding: 12px;
-    color: white;
-    resize: none;
-    font-family: inherit;
-}
-
-#packet-counter {
-    position: absolute;
-    bottom: 80px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #5865f2;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-weight: bold;
-    z-index: 100;
-}
-
-.hidden { display: none !important; }
-
-#qrcode { background: white; padding: 10px; margin: 10px auto; width: 128px; }
-
-.util-bar { text-align: center; background: #202225; padding: 5px; }
-#reset-receiver { background: none; border: none; color: #72767d; cursor: pointer; text-decoration: underline; font-size: 10px; }
-
-/* ... Keep your existing desktop styles at the top ... */
-
-/* MOBILE FIXES */
-@media (max-width: 600px) {
+/* ==========================================
+   6. MOBILE RESPONSIVENESS (Media Queries)
+   ========================================== */
+@media (max-width: 768px) {
+    /* Stack layout for small screens */
     #app-wrapper {
-        flex-direction: row; /* Keep sidebar on left, but smaller */
+        flex-direction: row;
     }
 
+    /* Shrink sidebar so it doesn't take too much space */
     .sidebar {
-        width: 60px; /* Thinner sidebar for mobile */
-        padding-top: 10px;
+        width: 60px;
+        padding: 10px 0;
     }
 
     .server-icon {
         width: 40px;
         height: 40px;
-        font-size: 14px;
+        font-size: 12px;
     }
 
-    /* Fix the Header Clutter */
+    /* Adjust Chat Header for small screens */
     .chat-header {
-        flex-direction: column; 
-        align-items: flex-start;
-        padding: 8px;
-        height: auto;
+        padding: 0 10px;
     }
 
-    .header-actions {
-        width: 100%;
-        margin-top: 8px;
-        justify-content: space-between;
+    .header-main h2 {
+        font-size: 14px;
+        max-width: 120px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     #secret-key {
-        width: 60%; /* Give more room to passcode box */
+        width: 80px; /* Smaller passcode box on mobile */
+        font-size: 11px;
     }
 
-    /* Fix the Input Area (The "can't add text" issue) */
+    /* Make message bubbles wider on mobile */
+    .message {
+        max-width: 85%;
+        font-size: 15px; /* Slightly larger text for mobile readability */
+        padding: 12px 16px;
+    }
+
+    /* Fixed Input Area for Mobile Keyboard */
     .chat-input-area {
         padding: 10px;
+        background: var(--bg-chat);
         position: sticky;
         bottom: 0;
-        background: #2f3136;
     }
 
     #import-input {
-        font-size: 16px; /* Prevents iOS/Android from zooming in on focus */
-        padding: 8px;
+        font-size: 16px; /* Prevents iOS from auto-zooming on focus */
+        height: 40px;
     }
 
-    .send-btn, .attach-btn {
-        width: 44px; /* Larger touch targets for fingers */
-        height: 44px;
+    /* Modal Adjustments for Vertical Screens */
+    .modal-content {
+        max-width: 95%;
+        width: auto;
     }
+
+    .viewer-controls {
+        flex-wrap: wrap; /* Buttons wrap on small screens */
+        padding: 15px 10px;
+        gap: 8px;
+    }
+
+    .viewer-controls button {
+        flex: 1; /* Buttons fill the width */
+        font-size: 12px;
+        padding: 12px 5px;
+    }
+
+    /* Utility Bar (Clear History) */
+    .util-bar {
+        padding: 5px;
+    }
+    
+    #reset-receiver {
+        width: 100%;
+        border-radius: 0;
+        font-size: 11px;
+        background: #da373c; /* Red color for destructive action */
+    }
+}
+
+/* Landscape Mode Tweak */
+@media (max-height: 500px) {
+    .sidebar { display: none; } /* Hide sidebar in landscape to save height */
+    .chat-header { height: 40px; }
 }
