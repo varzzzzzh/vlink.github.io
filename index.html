@@ -1,17 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VLink | Secure Chat</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/idb@8/build/umd.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
 <body>
-    <div id="app-wrapper" style="display: flex; height: 100vh; overflow: hidden;">
-        <nav class="sidebar" style="width: 70px; background: #202225; display: flex; flex-direction: column; align-items: center; padding-top: 15px; gap: 12px;">
-            <div class="server-icon active" style="width: 48px; height: 48px; background: #5865f2; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; cursor: pointer; font-weight: bold;">VL</div>
-            <div id="friends-list" style="display: flex; flex-direction: column; gap: 8px;">
-                </div>
-            <button id="add-friend-btn" style="width: 48px; height: 48px; background: #3ba55d; border: none; border-radius: 50%; color: white; font-size: 24px; cursor: pointer;">+</button>
+    <div id="app-wrapper">
+        <nav class="sidebar">
+            <div class="server-icon active">VL</div>
+            <div id="friends-list"></div>
+            <button id="add-friend-btn">+</button>
         </nav>
 
-        <main id="chat-app" style="flex: 1; display: flex; flex-direction: column; background: #36393f;">
+        <main id="chat-app">
             <header class="chat-header">
                 <div class="header-main">
-                    <h2 id="chat-target" style="margin:0; font-size: 18px;">Select a Friend</h2>
-                    <div id="status" style="font-size: 10px; opacity: 0.8;">● Secure Offline Protocol</div>
+                    <h2 id="chat-target">Select a Friend</h2>
+                    <div id="status">● Secure Offline Protocol</div>
                 </div>
                 <div class="header-actions">
                     <input type="password" id="secret-key" placeholder="Passcode">
@@ -19,9 +28,9 @@
                 </div>
             </header>
 
-            <div id="qrcode" style="display:none; text-align: center; background: white; padding: 20px;"></div>
+            <div id="qrcode" style="display:none;"></div>
 
-            <div id="chat-thread" style="flex: 1; overflow-y: auto; padding: 20px;">
+            <div id="chat-thread">
                 <div class="message system">Click "+" to add a friend's phone number. Use the same passcode to chat.</div>
             </div>
 
@@ -40,5 +49,9 @@
             </footer>
         </main>
     </div>
+    <div class="util-bar">
+        <button id="reset-receiver">Clear History</button>
+    </div>
     <script src="app.js"></script>
 </body>
+</html>

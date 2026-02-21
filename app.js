@@ -1,40 +1,31 @@
-// ==========================================
-// 1. DATABASE & STATE
-// ==========================================
 let db;
 let reassemblyBuffer = {};
 let activeFriend = null;
 let friends = JSON.parse(localStorage.getItem('vlink_friends')) || [];
 
 async function initDB() {
-    db = await idb.openDB('VLinkDB', 1, {
-        upgrade(db) { db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true }); },
-    });
+    if (typeof idb !== 'undefined') {
+        db = await idb.openDB('VLinkDB', 1, {
+            upgrade(db) { db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true }); },
+        });
+    }
     renderFriends();
 }
 initDB();
 
-// UI Selectors
-const chatThread = document.getElementById('chat-thread');
-const importInput = document.getElementById('import-input');
-const secretKeyInput = document.getElementById('secret-key');
-const packetCounter = document.getElementById('packet-counter');
-
-// ==========================================
-// 2. DISCORD SIDEBAR LOGIC
-// ==========================================
 function renderFriends() {
     const list = document.getElementById('friends-list');
+    if (!list) return;
     list.innerHTML = '';
     friends.forEach(f => {
         const div = document.createElement('div');
         div.className = `server-icon ${activeFriend?.id === f.id ? 'active' : ''}`;
-        div.style = "width: 48px; height: 48px; background: #4f545c; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; cursor: pointer; margin-bottom: 8px;";
         div.innerText = f.name[0].toUpperCase();
         div.onclick = () => {
             activeFriend = f;
             document.getElementById('chat-target').innerText = `@${f.name}`;
-            addMessage(`Secure line open with ${f.name} (${f.phone})`, "system");
+            renderFriends();
+            addMessage(`Switched to ${f.name}`, "system");
         };
         list.appendChild(div);
     });
@@ -42,7 +33,7 @@ function renderFriends() {
 
 document.getElementById('add-friend-btn').onclick = () => {
     const name = prompt("Friend Name:");
-    const phone = prompt("Phone Number (with country code, e.g., +91...):");
+    const phone = prompt("Phone Number (+91...):");
     if (name && phone) {
         friends.push({ id: Date.now(), name, phone });
         localStorage.setItem('vlink_friends', JSON.stringify(friends));
@@ -50,9 +41,7 @@ document.getElementById('add-friend-btn').onclick = () => {
     }
 };
 
-// ==========================================
-// 3. CRYPTO & SENDER
-// ==========================================
+// Cryptography
 async function getEncryptionKey(password) {
     const enc = new TextEncoder();
     const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveKey"]);
@@ -71,9 +60,17 @@ async function encryptData(text, password) {
     return btoa(String.fromCharCode(...combined));
 }
 
+async function decryptData(base64Data, password) {
+    const key = await getEncryptionKey(password);
+    const combined = new Uint8Array(atob(base64Data).split("").map(c => c.charCodeAt(0)));
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: combined.slice(0, 12) }, key, combined.slice(12));
+    return new TextDecoder().decode(decrypted);
+}
+
+// Sending Logic
 async function startSmsHandover(data, isImage = false) {
-    const password = secretKeyInput.value;
-    if (!password || !activeFriend) return alert("Select friend and set passcode!");
+    const password = document.getElementById('secret-key').value;
+    if (!password || !activeFriend) return alert("Select a friend and set passcode!");
 
     let encrypted = await encryptData(data, password);
     const chunkSize = 120;
@@ -86,48 +83,41 @@ async function startSmsHandover(data, isImage = false) {
 
     addMessage(data, 'sent', isImage);
     
-    let currentIdx = 0;
-    packetCounter.classList.remove('hidden');
+    let idx = 0;
+    const counter = document.getElementById('packet-counter');
+    counter.classList.remove('hidden');
+    
     const updateBadge = () => {
-        packetCounter.innerText = `Click to Send Part ${currentIdx + 1}/${packets.length}`;
-        packetCounter.onclick = () => {
-            // THE LONG DISTANCE MAGIC:
-            window.location.href = `sms:${activeFriend.phone}?body=${encodeURIComponent(packets[currentIdx])}`;
-            currentIdx++;
-            if (currentIdx < packets.length) updateBadge();
+        counter.innerText = `Send Part ${idx + 1}/${packets.length} to ${activeFriend.name}`;
+        counter.onclick = () => {
+            window.location.href = `sms:${activeFriend.phone}?body=${encodeURIComponent(packets[idx])}`;
+            idx++;
+            if (idx < packets.length) updateBadge();
             else {
-                packetCounter.innerText = "All Sent ✓";
-                setTimeout(() => packetCounter.classList.add('hidden'), 3000);
+                counter.innerText = "All Sent ✓";
+                setTimeout(() => counter.classList.add('hidden'), 3000);
             }
         };
     };
     updateBadge();
 }
 
-// ==========================================
-// 4. RECEIVER & UI
-// ==========================================
+// UI Helpers
 function addMessage(content, type = 'sent', isImage = false) {
     const div = document.createElement('div');
     div.className = `message ${type}`;
     if (isImage) {
         const img = document.createElement('img'); img.src = content;
-        img.style = "max-width: 100%; border-radius: 8px;";
+        img.style.maxWidth = "100%"; img.style.borderRadius = "8px";
         div.appendChild(img);
     } else { div.innerText = content; }
-    chatThread.appendChild(div);
-    chatThread.scrollTop = chatThread.scrollHeight;
-}
-
-async function decryptData(base64Data, password) {
-    const key = await getEncryptionKey(password);
-    const combined = new Uint8Array(atob(base64Data).split("").map(c => c.charCodeAt(0)));
-    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: combined.slice(0, 12) }, key, combined.slice(12));
-    return new TextDecoder().decode(decrypted);
+    const thread = document.getElementById('chat-thread');
+    thread.appendChild(div);
+    thread.scrollTop = thread.scrollHeight;
 }
 
 async function processIncoming(rawData) {
-    const password = secretKeyInput.value;
+    const password = document.getElementById('secret-key').value;
     if (!rawData.startsWith('VLINK|')) return;
 
     const parts = rawData.split('|');
@@ -144,20 +134,19 @@ async function processIncoming(rawData) {
 
     if (received === tot) {
         try {
-            const fullData = reassemblyBuffer[tId].join('');
-            const decrypted = await decryptData(fullData, password);
+            const decrypted = await decryptData(reassemblyBuffer[tId].join(''), password);
             addMessage(decrypted, 'received', decrypted.startsWith('data:image'));
             if ("vibrate" in navigator) navigator.vibrate([100, 50, 100]);
             delete reassemblyBuffer[tId];
         } catch (e) { addMessage("Decryption failed!", "system"); }
     }
-    importInput.value = "";
+    document.getElementById('import-input').value = "";
 }
 
 // Listeners
 document.getElementById('chunk-btn').onclick = () => {
-    const text = importInput.value.trim();
-    if (text) { startSmsHandover(text); importInput.value = ""; }
+    const input = document.getElementById('import-input');
+    if (input.value.trim()) { startSmsHandover(input.value.trim()); input.value = ""; }
 };
 
 document.getElementById('file-input').onchange = (e) => {
@@ -166,9 +155,10 @@ document.getElementById('file-input').onchange = (e) => {
     reader.readAsDataURL(e.target.files[0]);
 };
 
-importInput.addEventListener('input', (e) => processIncoming(e.target.value.trim()));
+document.getElementById('import-input').addEventListener('input', (e) => {
+    if (e.target.value.startsWith('VLINK|')) processIncoming(e.target.value.trim());
+});
 
-// Share QR
 document.getElementById('show-qr-btn').onclick = () => {
     const qr = document.getElementById('qrcode');
     qr.style.display = qr.style.display === 'none' ? 'block' : 'none';
@@ -176,5 +166,5 @@ document.getElementById('show-qr-btn').onclick = () => {
 };
 
 document.getElementById('reset-receiver').onclick = () => {
-    chatThread.innerHTML = '<div class="message system">History cleared.</div>';
+    document.getElementById('chat-thread').innerHTML = '<div class="message system">History cleared.</div>';
 };
