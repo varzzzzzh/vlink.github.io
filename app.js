@@ -168,3 +168,22 @@ document.getElementById('show-qr-btn').onclick = () => {
 document.getElementById('reset-receiver').onclick = () => {
     document.getElementById('chat-thread').innerHTML = '<div class="message system">History cleared.</div>';
 };
+
+
+
+const fileInput = document.getElementById('file-input');
+
+fileInput.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Optional: Alert the user that processing has started
+    addMessage("Processing image...", "system");
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        // Start the SMS handover with the image data
+        startSmsHandover(ev.target.result, true);
+    };
+    reader.readAsDataURL(file);
+};
