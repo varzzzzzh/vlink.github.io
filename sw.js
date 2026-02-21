@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vlink-chat-v3'; // Version incremented for Chat UI update
+const CACHE_NAME = 'vlink-discord-v4'; // Incremented for Sidebar & P2P update
 
 const ASSETS = [
   './',
@@ -8,23 +8,23 @@ const ASSETS = [
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  // External Libraries
   'https://cdn.jsdelivr.net/npm/idb@8/build/umd.js',
   'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
 ];
 
-// Install: Cache everything needed for the Chat UI
+// 1. Install: Force cache all essential files
 self.addEventListener('install', (event) => {
-  // Force the waiting service worker to become the active one immediately
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('VLink: System Offline Assets Cached');
+      console.log('VLink: Caching Discord UI & Security Modules');
       return cache.addAll(ASSETS);
     })
   );
 });
 
-// Activate: Purge old VLink versions to free up phone storage
+// 2. Activate: Wipe out old versions to save phone storage
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -33,21 +33,29 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  // Ensure the updated sw.js takes control of the page immediately
   self.clients.claim();
 });
 
-// Fetch: "Cache First" Strategy
-// This ensures the app loads instantly even with zero bars of signal.
+// 3. Fetch: "Stale-While-Revalidate" Strategy
+// Loads instantly from cache, but updates the cache in the background if online.
 self.addEventListener('fetch', (event) => {
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).catch(() => {
-        // Optional: return a custom offline page if fetch fails and no cache
-        console.log("VLink: Fetch failed, no network available.");
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.match(event.request).then((response) => {
+        const fetchPromise = fetch(event.request).then((networkResponse) => {
+          // Update the cache with the new version from network
+          if (networkResponse.status === 200) {
+            cache.put(event.request, networkResponse.clone());
+          }
+          return networkResponse;
+        }).catch(() => {
+          // Fallback if network fails completely (Offline Mode)
+          console.log("VLink: Running in full offline mode.");
+        });
+
+        // Return the cached version immediately (speed), 
+        // while fetchPromise updates it in the background
+        return response || fetchPromise;
       });
     })
   );
