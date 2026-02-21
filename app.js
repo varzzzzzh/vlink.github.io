@@ -181,7 +181,7 @@ fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    addMessage("Shrinking photo for 3-5 packets...", "system");
+    addMessage("Optimizing notes for long-distance send...", "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -189,19 +189,23 @@ fileInput.onchange = (e) => {
         img.onload = () => {
             const canvas = document.createElement('canvas');
             
-            // 180px width + 0.3 quality = Very few packets
-            const MAX_WIDTH = 180; 
+            // 800px is the "Magic Number" for reading handwritten notes
+            const MAX_WIDTH = 800; 
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
 
             const ctx = canvas.getContext('2d');
+            
+            // Sharpening for text readability
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
+            
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-            // Convert to ultra-low quality JPEG
-            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.3); 
+            // 0.2 quality is enough for B&W or notebook paper text
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.2); 
+            
             startSmsHandover(compressedDataUrl, true);
         };
         img.src = event.target.result;
