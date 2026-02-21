@@ -1,3 +1,6 @@
+// ==========================================
+// 1. DATABASE & STATE
+// ==========================================
 let db;
 let reassemblyBuffer = {};
 let activeFriend = null;
@@ -13,6 +16,16 @@ async function initDB() {
 }
 initDB();
 
+// UI Selectors
+const chatThread = document.getElementById('chat-thread');
+const importInput = document.getElementById('import-input');
+const secretKeyInput = document.getElementById('secret-key');
+const packetCounter = document.getElementById('packet-counter');
+const fileInput = document.getElementById('file-input');
+
+// ==========================================
+// 2. DISCORD SIDEBAR LOGIC
+// ==========================================
 function renderFriends() {
     const list = document.getElementById('friends-list');
     if (!list) return;
@@ -41,7 +54,9 @@ document.getElementById('add-friend-btn').onclick = () => {
     }
 };
 
-// Cryptography
+// ==========================================
+// 3. CRYPTOGRAPHY
+// ==========================================
 async function getEncryptionKey(password) {
     const enc = new TextEncoder();
     const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveKey"]);
@@ -67,13 +82,17 @@ async function decryptData(base64Data, password) {
     return new TextDecoder().decode(decrypted);
 }
 
-// Sending Logic
+// ==========================================
+// 4. SENDING LOGIC (Optimized for 3-5 Packets)
+// ==========================================
 async function startSmsHandover(data, isImage = false) {
-    const password = document.getElementById('secret-key').value;
+    const password = secretKeyInput.value;
     if (!password || !activeFriend) return alert("Select a friend and set passcode!");
 
     let encrypted = await encryptData(data, password);
-    const chunkSize = 120;
+    
+    // INCREASED CHUNK SIZE: Modern phones handle ~1200 characters well
+    const chunkSize = 1200; 
     const tId = Math.floor(Math.random() * 900) + 100;
     const packets = [];
 
@@ -84,40 +103,44 @@ async function startSmsHandover(data, isImage = false) {
     addMessage(data, 'sent', isImage);
     
     let idx = 0;
-    const counter = document.getElementById('packet-counter');
-    counter.classList.remove('hidden');
+    packetCounter.classList.remove('hidden');
     
     const updateBadge = () => {
-        counter.innerText = `Send Part ${idx + 1}/${packets.length} to ${activeFriend.name}`;
-        counter.onclick = () => {
+        packetCounter.innerText = `Send Part ${idx + 1}/${packets.length} to SMS`;
+        packetCounter.onclick = () => {
             window.location.href = `sms:${activeFriend.phone}?body=${encodeURIComponent(packets[idx])}`;
             idx++;
             if (idx < packets.length) updateBadge();
             else {
-                counter.innerText = "All Sent ✓";
-                setTimeout(() => counter.classList.add('hidden'), 3000);
+                packetCounter.innerText = "All Sent ✓";
+                setTimeout(() => packetCounter.classList.add('hidden'), 3000);
             }
         };
     };
     updateBadge();
 }
 
-// UI Helpers
+// ==========================================
+// 5. UI HELPERS & RECEIVER
+// ==========================================
 function addMessage(content, type = 'sent', isImage = false) {
     const div = document.createElement('div');
     div.className = `message ${type}`;
     if (isImage) {
-        const img = document.createElement('img'); img.src = content;
-        img.style.maxWidth = "100%"; img.style.borderRadius = "8px";
+        const img = document.createElement('img'); 
+        img.src = content;
+        img.style.maxWidth = "100%"; 
+        img.style.borderRadius = "8px";
         div.appendChild(img);
-    } else { div.innerText = content; }
-    const thread = document.getElementById('chat-thread');
-    thread.appendChild(div);
-    thread.scrollTop = thread.scrollHeight;
+    } else { 
+        div.innerText = content; 
+    }
+    chatThread.appendChild(div);
+    chatThread.scrollTop = chatThread.scrollHeight;
 }
 
 async function processIncoming(rawData) {
-    const password = document.getElementById('secret-key').value;
+    const password = secretKeyInput.value;
     if (!rawData.startsWith('VLINK|')) return;
 
     const parts = rawData.split('|');
@@ -140,22 +163,53 @@ async function processIncoming(rawData) {
             delete reassemblyBuffer[tId];
         } catch (e) { addMessage("Decryption failed!", "system"); }
     }
-    document.getElementById('import-input').value = "";
+    importInput.value = "";
 }
 
-// Listeners
+// ==========================================
+// 6. LISTENERS
+// ==========================================
 document.getElementById('chunk-btn').onclick = () => {
-    const input = document.getElementById('import-input');
-    if (input.value.trim()) { startSmsHandover(input.value.trim()); input.value = ""; }
+    if (importInput.value.trim()) { 
+        startSmsHandover(importInput.value.trim()); 
+        importInput.value = ""; 
+    }
 };
 
-document.getElementById('file-input').onchange = (e) => {
+// ULTRA-LIGHT IMAGE COMPRESSION
+fileInput.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    addMessage("Shrinking photo for 3-5 packets...", "system");
+
     const reader = new FileReader();
-    reader.onload = (ev) => startSmsHandover(ev.target.result, true);
-    reader.readAsDataURL(e.target.files[0]);
+    reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            
+            // 180px width + 0.3 quality = Very few packets
+            const MAX_WIDTH = 180; 
+            const scaleSize = MAX_WIDTH / img.width;
+            canvas.width = MAX_WIDTH;
+            canvas.height = img.height * scaleSize;
+
+            const ctx = canvas.getContext('2d');
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            // Convert to ultra-low quality JPEG
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.3); 
+            startSmsHandover(compressedDataUrl, true);
+        };
+        img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
 };
 
-document.getElementById('import-input').addEventListener('input', (e) => {
+importInput.addEventListener('input', (e) => {
     if (e.target.value.startsWith('VLINK|')) processIncoming(e.target.value.trim());
 });
 
@@ -166,24 +220,5 @@ document.getElementById('show-qr-btn').onclick = () => {
 };
 
 document.getElementById('reset-receiver').onclick = () => {
-    document.getElementById('chat-thread').innerHTML = '<div class="message system">History cleared.</div>';
-};
-
-
-
-const fileInput = document.getElementById('file-input');
-
-fileInput.onchange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    // Optional: Alert the user that processing has started
-    addMessage("Processing image...", "system");
-
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-        // Start the SMS handover with the image data
-        startSmsHandover(ev.target.result, true);
-    };
-    reader.readAsDataURL(file);
+    chatThread.innerHTML = '<div class="message system">History cleared.</div>';
 };
