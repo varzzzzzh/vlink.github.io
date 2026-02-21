@@ -92,7 +92,7 @@ async function startSmsHandover(data, isImage = false) {
     let encrypted = await encryptData(data, password);
     
     // INCREASED CHUNK SIZE: Modern phones handle ~1200 characters well
-    const chunkSize = 1200; 
+    const chunkSize = 2000; 
     const tId = Math.floor(Math.random() * 900) + 100;
     const packets = [];
 
