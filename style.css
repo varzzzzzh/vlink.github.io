@@ -3,142 +3,195 @@
    ========================================== */
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background-color: #f0f2f5;
+    background-color: #111; /* Darker background for focus */
     margin: 0;
     display: flex;
     justify-content: center;
-    color: #333;
+    height: 100vh;
+    overflow: hidden; /* Prevents body from scrolling */
 }
 
-main {
+#chat-app {
     max-width: 500px;
     width: 100%;
-    background: white;
-    min-height: 100vh;
-    padding: 20px;
-    box-sizing: border-box;
-    box-shadow: 0 0 20px rgba(0,0,0,0.05);
+    background: #e5ddd5; /* Classic chat wallpaper color */
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    box-shadow: 0 0 40px rgba(0,0,0,0.5);
 }
 
 /* ==========================================
-   2. CONTAINERS (CARDS)
+   2. HEADER
    ========================================== */
-.card {
-    margin-bottom: 20px;
-    padding: 20px;
-    border-radius: 16px;
-    background: #ffffff;
-    border: 1px solid #eaeaea;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+.chat-header {
+    background: #075e54;
+    color: white;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 10;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
 
-h1, h3 { 
-    margin-top: 0;
+.header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
 }
 
-hr {
-    border: 0;
-    height: 1px;
-    background: #eee;
-    margin: 20px 0;
-}
-
-/* ==========================================
-   3. BUTTONS
-   ========================================== */
-button, .btn-primary, .btn-success, .btn-secondary {
+#secret-key {
+    width: 100px;
+    padding: 6px;
+    border-radius: 6px;
     border: none;
-    padding: 12px 18px;
-    border-radius: 10px;
-    font-weight: 600;
+    font-size: 12px;
+    margin-bottom: 0; /* Override global margin */
+}
+
+.icon-btn {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    font-weight: bold;
     cursor: pointer;
-    transition: transform 0.1s, background 0.2s;
-    font-size: 14px;
-}
-
-button:active {
-    transform: scale(0.98);
-}
-
-.btn-primary {
-    background: #007AFF;
-    color: white;
-    width: 100%;
-}
-
-.btn-success {
-    background: #28a745;
-    color: white;
-}
-
-.btn-secondary {
-    background: #6c757d;
-    color: white;
-}
-
-button:hover {
-    filter: brightness(90%);
 }
 
 /* ==========================================
-   4. INPUTS & FORMS
+   3. CHAT THREAD (MESSAGES)
    ========================================== */
-input[type="password"], 
-input[type="file"], 
-textarea {
-    width: 100%;
-    border: 1px solid #ddd;
-    border-radius: 10px;
-    padding: 12px;
+#chat-thread {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    scroll-behavior: smooth;
+}
+
+.message {
+    max-width: 80%;
+    padding: 8px 12px;
     font-size: 14px;
-    box-sizing: border-box;
-    margin-bottom: 10px;
-    transition: border-color 0.2s;
+    line-height: 1.4;
+    position: relative;
+    box-shadow: 0 1px 1px rgba(0,0,0,0.1);
 }
 
-input:focus, textarea:focus {
-    outline: none;
-    border-color: #007AFF;
+.message.sent {
+    align-self: flex-end;
+    background: #dcf8c6;
+    border-radius: 10px 0 10px 10px;
+    color: #303030;
 }
 
-textarea {
-    font-family: 'Courier New', Courier, monospace;
-    resize: vertical;
+.message.received {
+    align-self: flex-start;
+    background: #ffffff;
+    border-radius: 0 10px 10px 10px;
+    color: #303030;
+}
+
+.message.system {
+    align-self: center;
+    background: #fff5c4;
+    color: #555;
+    font-size: 11px;
+    border-radius: 8px;
+    text-align: center;
+    max-width: 90%;
+    box-shadow: none;
+}
+
+/* ==========================================
+   4. INPUT BAR (BOTTOM)
+   ========================================== */
+.chat-input-area {
+    background: #f0f0f0;
+    padding: 10px 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid #ddd;
+}
+
+#import-input {
+    flex: 1;
+    background: white;
+    border-radius: 20px;
+    border: 1px solid #ddd;
+    padding: 10px 15px;
+    font-size: 14px;
+    max-height: 100px;
+    margin-bottom: 0;
+    font-family: inherit;
+    resize: none;
+}
+
+.attach-btn {
+    color: #075e54;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.send-btn {
+    background: #075e54;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
 }
 
 /* ==========================================
    5. SPECIAL ELEMENTS
    ========================================== */
-details {
-    background: #f8f9fa;
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 15px;
+#packet-counter {
+    position: absolute;
+    bottom: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #075e54;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    z-index: 20;
+    transition: all 0.3s ease;
 }
 
-summary {
-    cursor: pointer;
-    font-weight: 500;
-    color: #666;
+#packet-counter:active {
+    transform: translateX(-50%) scale(0.95);
+    background: #128c7e;
 }
 
-#thumbnail-canvas {
-    /* Kept for background processing, hidden via HTML display:none */
-    border-radius: 8px;
-    max-width: 100%;
+.hidden {
+    display: none !important;
 }
 
-#reconstructed-image-container img {
-    max-width: 100%;
-    height: auto;
-    border-radius: 12px;
-    margin-top: 10px;
+#qrcode img {
+    margin: 0 auto;
 }
 
-/* Progress Text */
-#assembly-progress {
-    padding: 10px;
-    border-radius: 8px;
-    background: #e7f3ff;
-    color: #007AFF;
+/* Animation for new messages */
+@keyframes popIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.message {
+    animation: popIn 0.2s ease-out;
 }

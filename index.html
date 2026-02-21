@@ -2,65 +2,59 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VLink | Secure Offline Transfer</title>
-    <meta name="theme-color" content="#007AFF">
-    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VLink | Secure Chat</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/idb@8/build/umd.js"></script>
+    
+    <meta name="theme-color" content="#075e54">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
-    <main>
-        <header style="text-align: center; margin-bottom: 20px;">
-            <h1 style="color: #007AFF; margin-bottom: 5px;">VLink Protocol</h1>
-            <div id="status" style="font-size: 0.9em; color: #666;">
-                System: <span id="online-status" style="color: #28a745; font-weight: bold;">Ready</span>
+
+    <main id="chat-app">
+        <header class="chat-header">
+            <div class="header-main">
+                <h2 style="margin:0; font-size: 18px;">VLink Messenger</h2>
+                <div id="status" style="font-size: 10px; opacity: 0.8;">● Secure Offline Mode</div>
+            </div>
+            <div class="header-actions">
+                <input type="password" id="secret-key" placeholder="Passcode">
+                <button id="show-qr-btn" class="icon-btn">QR</button>
             </div>
         </header>
 
-        <section id="security-zone" class="card">
-            <h3>Step 0: Security</h3>
-            <input type="password" id="secret-key" placeholder="Enter Security Password" style="width: 100%; padding: 10px; box-sizing: border-box;">
-            <p style="font-size: 11px; color: #888; margin-top: 8px;">*Password must match on both devices to decrypt.</p>
-        </section>
+        <div id="qrcode" style="display:none; text-align: center; background: white; padding: 20px; border-bottom: 1px solid #ddd;"></div>
 
-        <section id="compression-zone" class="card">
-            <h3>Step 1: Send Image</h3>
-            <input type="file" id="file-input" accept="image/*" style="margin-bottom: 15px;">
-            
-            <details style="font-size: 12px; color: #666; margin-bottom: 10px;">
-                <summary>View Processing Details</summary>
-                <div id="preview-container" style="margin-top: 10px;">
-                    <canvas id="thumbnail-canvas" style="display: none;"></canvas>
-                    <p id="size-report">No image selected.</p>
-                </div>
-            </details>
-
-            <button id="chunk-btn" class="btn-primary">Generate Secure Packets</button>
-            <div id="packet-list" style="margin-top: 15px;"></div>
-        </section>
-
-        <hr style="border: 0; height: 1px; background: #eee; margin: 25px 0;">
-
-        <section id="receiver-zone" class="card">
-            <h3>Step 2: Receive & Decrypt</h3>
-            <textarea id="import-input" placeholder="Paste VLINK packet here..." style="width:100%; height:100px; padding: 10px; box-sizing: border-box; border-radius: 8px; border: 1px solid #ccc;"></textarea>
-            
-            <div style="display: flex; gap: 10px; margin-top: 10px;">
-                <button id="import-btn" class="btn-success" style="flex: 2;">Process Packet</button>
-                <button id="reset-receiver" class="btn-secondary" style="flex: 1;">Reset</button>
+        <div id="chat-thread">
+            <div class="message system">Welcome to VLink Protocol. Set your passcode and share your app via QR to begin.</div>
             </div>
 
-            <div id="assembly-progress" style="margin-top: 15px; font-size: 14px; text-align: center; color: #007AFF;"></div>
-            <div id="reconstructed-image-container" style="margin-top:20px; text-align: center;"></div>
-        </section>
-        
-        <div style="margin-top: 30px; padding: 10px; text-align: center;">
-            <button id="clear-btn" style="background:none; border:none; color:#dc3545; text-decoration: underline; font-size: 12px; cursor: pointer;">Clear System Memory</button>
-        </div>
+        <canvas id="thumbnail-canvas" style="display: none;"></canvas>
+
+        <footer class="chat-input-area">
+            <div id="packet-counter" class="hidden">0/0</div>
+
+            <label for="file-input" class="attach-btn">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            </label>
+            <input type="file" id="file-input" accept="image/*" hidden>
+
+            <textarea id="import-input" placeholder="Paste packet or type..."></textarea>
+
+            <button id="chunk-btn" class="send-btn">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+        </footer>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/idb@8/build/umd.js"></script>
+    <div style="text-align: center; padding: 10px; background: #e5ddd5;">
+        <button id="reset-receiver" style="background:none; border:none; color:#666; font-size:10px; text-decoration: underline;">Clear Chat History</button>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>

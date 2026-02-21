@@ -1,4 +1,5 @@
-const CACHE_NAME = 'vlink-v2'; // Incremented version to refresh user caches
+const CACHE_NAME = 'vlink-chat-v3'; // Version incremented for Chat UI update
+
 const ASSETS = [
   './',
   './index.html',
@@ -7,20 +8,23 @@ const ASSETS = [
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  'https://cdn.jsdelivr.net/npm/idb@8/build/umd.js'
+  'https://cdn.jsdelivr.net/npm/idb@8/build/umd.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
 ];
 
-// Install: Cache all files for offline use
+// Install: Cache everything needed for the Chat UI
 self.addEventListener('install', (event) => {
+  // Force the waiting service worker to become the active one immediately
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('VLink: Caching App Shell and Icons');
+      console.log('VLink: System Offline Assets Cached');
       return cache.addAll(ASSETS);
     })
   );
 });
 
-// Activate: Clean up old caches
+// Activate: Purge old VLink versions to free up phone storage
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -29,13 +33,22 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
+  // Ensure the updated sw.js takes control of the page immediately
+  self.clients.claim();
 });
 
-// Fetch: Serve from cache first, then network
+// Fetch: "Cache First" Strategy
+// This ensures the app loads instantly even with zero bars of signal.
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request);
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(event.request).catch(() => {
+        // Optional: return a custom offline page if fetch fails and no cache
+        console.log("VLink: Fetch failed, no network available.");
+      });
     })
   );
 });

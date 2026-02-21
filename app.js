@@ -1,40 +1,33 @@
 // ==========================================
-// 1. DATABASE INITIALIZATION
+// 1. DATABASE & GLOBALS
 // ==========================================
 let db;
+let reassemblyBuffer = {};
+let currentPackets = [];
+let currentCopyIndex = 0;
 
 async function initDB() {
     db = await idb.openDB('VLinkDB', 1, {
         upgrade(db) {
             db.createObjectStore('chunks', { keyPath: 'id', autoIncrement: true });
-            db.createObjectStore('settings');
-            console.log("IndexedDB: Stores created.");
+            console.log("IndexedDB: System Ready.");
         },
     });
-    console.log("IndexedDB: System Ready.");
 }
-
 initDB();
 
-// ==========================================
-// 2. UI ELEMENTS & GLOBALS
-// ==========================================
+// UI Selectors
 const fileInput = document.getElementById('file-input');
 const canvas = document.getElementById('thumbnail-canvas');
 const ctx = canvas.getContext('2d');
-const sizeReport = document.getElementById('size-report');
 const chunkBtn = document.getElementById('chunk-btn');
-const packetList = document.getElementById('packet-list');
-
 const importInput = document.getElementById('import-input');
-const importBtn = document.getElementById('import-btn');
-const assemblyProgress = document.getElementById('assembly-progress');
-const reconstructedContainer = document.getElementById('reconstructed-image-container');
-
-let reassemblyBuffer = {};
+const chatThread = document.getElementById('chat-thread');
+const secretKeyInput = document.getElementById('secret-key');
+const packetCounter = document.getElementById('packet-counter');
 
 // ==========================================
-// 3. CRYPTOGRAPHY HELPERS
+// 2. CRYPTOGRAPHY HELPERS
 // ==========================================
 async function getEncryptionKey(password) {
     const enc = new TextEncoder();
@@ -59,20 +52,37 @@ async function encryptData(text, password) {
 }
 
 async function decryptData(base64Data, password) {
-    try {
-        const key = await getEncryptionKey(password);
-        const combined = new Uint8Array(atob(base64Data).split("").map(c => c.charCodeAt(0)));
-        const iv = combined.slice(0, 12);
-        const data = combined.slice(12);
-        const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, data);
-        return new TextDecoder().decode(decrypted);
-    } catch (e) {
-        throw new Error("Decryption failed. Wrong password?");
-    }
+    const key = await getEncryptionKey(password);
+    const combined = new Uint8Array(atob(base64Data).split("").map(c => c.charCodeAt(0)));
+    const iv = combined.slice(0, 12);
+    const data = combined.slice(12);
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, data);
+    return new TextDecoder().decode(decrypted);
 }
 
 // ==========================================
-// 4. SENDER LOGIC (Compression & Encryption)
+// 3. CHAT UI HELPERS
+// ==========================================
+function addMessage(content, type = 'sent', isImage = false) {
+    const div = document.createElement('div');
+    div.className = `message ${type}`;
+    
+    if (isImage) {
+        const img = document.createElement('img');
+        img.src = content;
+        img.style.width = "100%";
+        img.style.borderRadius = "10px";
+        div.appendChild(img);
+    } else {
+        div.innerText = content;
+    }
+    
+    chatThread.appendChild(div);
+    chatThread.scrollTop = chatThread.scrollHeight;
+}
+
+// ==========================================
+// 4. SENDER LOGIC (Auto-Handover)
 // ==========================================
 fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -81,83 +91,82 @@ fileInput.addEventListener('change', (e) => {
     reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
-            // Processing happens in background
             canvas.width = 100;
             canvas.height = 100;
             ctx.drawImage(img, 0, 0, 100, 100);
-            
-            // UI Feedback
-            sizeReport.innerText = "Image compressed and ready for encryption.";
-            packetList.innerHTML = ""; 
+            addMessage("Image selected. Ready to send.", "system");
         };
         img.src = event.target.result;
     };
     reader.readAsDataURL(file);
 });
 
+async function startPacketHandover(packets) {
+    currentPackets = packets;
+    currentCopyIndex = 0;
+    
+    // Auto-copy the first packet
+    await navigator.clipboard.writeText(currentPackets[0]);
+    
+    packetCounter.classList.remove('hidden');
+    updateCounterDisplay();
+}
+
+function updateCounterDisplay() {
+    packetCounter.innerText = `Copy Packet ${currentCopyIndex + 1}/${currentPackets.length}`;
+    packetCounter.style.background = "#075e54";
+    packetCounter.style.color = "white";
+    packetCounter.style.padding = "5px 12px";
+    packetCounter.style.borderRadius = "20px";
+    packetCounter.style.fontSize = "12px";
+    packetCounter.style.cursor = "pointer";
+
+    packetCounter.onclick = async () => {
+        currentCopyIndex++;
+        if (currentCopyIndex < currentPackets.length) {
+            await navigator.clipboard.writeText(currentPackets[currentCopyIndex]);
+            updateCounterDisplay();
+        } else {
+            packetCounter.innerText = "All Sent ✓";
+            setTimeout(() => packetCounter.classList.add('hidden'), 3000);
+        }
+    };
+}
+
 chunkBtn.addEventListener('click', async () => {
-    const password = document.getElementById('secret-key')?.value;
-    if (!password) return alert("Please set a Security Password first!");
-    if (!canvas.width) return alert("Please select an image first!");
+    const password = secretKeyInput.value;
+    if (!password) return alert("Set a passcode first!");
+    if (!canvas.width) return alert("Select an image!");
 
-    sizeReport.innerText = "Securing data...";
-    
-    let dataToProcess = canvas.toDataURL('image/jpeg', 0.3);
-    
     try {
-        dataToProcess = await encryptData(dataToProcess, password);
-    } catch (err) {
-        return alert("Encryption Error");
+        let encrypted = await encryptData(canvas.toDataURL('image/jpeg', 0.3), password);
+        const chunkSize = 120;
+        const transmissionId = Math.floor(Math.random() * 900) + 100;
+        const chunks = [];
+
+        for (let i = 0; i < encrypted.length; i += chunkSize) {
+            chunks.push(encrypted.substring(i, i + chunkSize));
+        }
+
+        const finalizedPackets = chunks.map((data, index) => {
+            const seq = (index + 1).toString().padStart(2, '0');
+            const tot = chunks.length.toString().padStart(2, '0');
+            return `VLINK|ID:${transmissionId}|SEQ:${seq}|TOT:${tot}|DATA:${data}`;
+        });
+
+        addMessage(canvas.toDataURL('image/jpeg', 0.3), 'sent', true);
+        startPacketHandover(finalizedPackets);
+    } catch (e) {
+        alert("Error creating packets.");
     }
-
-    const chunkSize = 120; 
-    const chunks = [];
-    const transmissionId = Math.floor(Math.random() * 900) + 100;
-
-    for (let i = 0; i < dataToProcess.length; i += chunkSize) {
-        chunks.push(dataToProcess.substring(i, i + chunkSize));
-    }
-
-    const totalPackets = chunks.length;
-    packetList.innerHTML = `<h4 style="color:#007AFF;">Generated ${totalPackets} Secure Packets:</h4>`;
-
-    const finalizedPackets = chunks.map((data, index) => {
-        const seq = (index + 1).toString().padStart(2, '0');
-        const tot = totalPackets.toString().padStart(2, '0');
-        return `VLINK|ID:${transmissionId}|SEQ:${seq}|TOT:${tot}|DATA:${data}`;
-    });
-
-    finalizedPackets.forEach((packet, index) => {
-        const div = document.createElement('div');
-        div.style.cssText = "background: #fff; margin: 8px 0; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 11px; word-break: break-all; border: 1px solid #ddd; box-shadow: 0 2px 4px rgba(0,0,0,0.05);";
-        
-        const smsHref = `sms:?body=${encodeURIComponent(packet)}`;
-        
-        div.innerHTML = `
-            <div style="display:flex; justify-content:space-between; margin-bottom:8px; color:#666;">
-                <strong>Packet ${index + 1} of ${totalPackets}</strong>
-            </div>
-            <code style="display:block; background:#f8f9fa; padding:5px; border-radius:4px; margin-bottom:10px;">${packet}</code>
-            <div style="display:flex; gap:8px;">
-                <button style="flex:1; padding:8px;" onclick="navigator.clipboard.writeText('${packet}')">Copy Code</button>
-                <a href="${smsHref}" style="flex:1; text-align:center; text-decoration:none; background:#28a745; color:white; padding:8px; border-radius:4px; font-size:11px;">Send via SMS</a>
-            </div>
-        `;
-        packetList.appendChild(div);
-        savePacketToDB(packet, transmissionId);
-    });
-    sizeReport.innerText = "Encryption complete. Send packets below.";
 });
 
 // ==========================================
-// 5. RECEIVER LOGIC (Reassembly & Decryption)
+// 5. RECEIVER LOGIC (Auto-Detect)
 // ==========================================
-importBtn.addEventListener('click', async () => {
-    const password = document.getElementById('secret-key')?.value;
-    if (!password) return alert("Enter the security password to decrypt!");
-    
-    const rawData = importInput.value.trim();
-    if (!rawData.startsWith('VLINK|')) return alert("Please paste a valid VLink packet.");
+async function processIncomingPacket(rawData) {
+    const password = secretKeyInput.value;
+    if (!password) return addMessage("Error: Set passcode to receive.", "system");
 
     const parts = rawData.split('|');
     const tId = parts[1].split(':')[1];
@@ -166,67 +175,68 @@ importBtn.addEventListener('click', async () => {
     const data = parts[4].replace('DATA:', '');
 
     if (!reassemblyBuffer[tId]) reassemblyBuffer[tId] = new Array(tot).fill(null);
-    reassemblyBuffer[tId][seq - 1] = data;
+    
+    if (reassemblyBuffer[tId][seq - 1] === null) {
+        reassemblyBuffer[tId][seq - 1] = data;
+        const received = reassemblyBuffer[tId].filter(x => x !== null).length;
+        
+        addMessage(`Packet ${received}/${tot} received for ID ${tId}`, "system");
 
-    const receivedCount = reassemblyBuffer[tId].filter(x => x !== null).length;
-    assemblyProgress.innerText = `Received ${receivedCount} of ${tot} packets.`;
-
-    if (receivedCount === tot) {
-        try {
-            assemblyProgress.innerText = "Finalizing secure reassembly...";
-            const encryptedFull = reassemblyBuffer[tId].join('');
-            const decryptedBase64 = await decryptData(encryptedFull, password);
-            
-            const img = document.createElement('img');
-            img.src = decryptedBase64;
-            img.style.width = "100%";
-            img.style.borderRadius = "8px";
-            img.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
-            
-            reconstructedContainer.innerHTML = "<h4 style='color:#28a745;'>Message Decrypted:</h4>";
-            reconstructedContainer.appendChild(img);
-            delete reassemblyBuffer[tId];
-            assemblyProgress.innerText = "Success! Image recovered.";
-        } catch (err) {
-            alert("Security Error: " + err.message);
-            assemblyProgress.innerText = "Decryption Failed. Incorrect password?";
+        if (received === tot) {
+            try {
+                const fullEncrypted = reassemblyBuffer[tId].join('');
+                const decrypted = await decryptData(fullEncrypted, password);
+                addMessage(decrypted, "received", true);
+                delete reassemblyBuffer[tId];
+            } catch (e) {
+                addMessage("Decryption failed. Check passcode.", "system");
+            }
         }
     }
-    importInput.value = ""; // Clear for next packet
-});
-
-// ==========================================
-// 6. UTILITY FUNCTIONS
-// ==========================================
-async function savePacketToDB(packet, tId) {
-    if (!db) return;
-    const tx = db.transaction('chunks', 'readwrite');
-    await tx.store.add({
-        transmissionId: tId,
-        data: packet,
-        timestamp: Date.now()
-    });
-    await tx.done;
+    importInput.value = ""; 
+}
+// Add this inside the (receivedCount === tot) block in app.js
+if ("vibrate" in navigator) {
+    navigator.vibrate([100, 50, 100]); // Short double-buzz for success
 }
 
-// Reset functions
-const clearAll = () => {
-    reassemblyBuffer = {};
-    reconstructedContainer.innerHTML = "";
-    assemblyProgress.innerText = "";
-    importInput.value = "";
-};
-
-document.getElementById('reset-receiver').addEventListener('click', () => {
-    clearAll();
-    assemblyProgress.innerText = "Receiver memory cleared.";
+importInput.addEventListener('input', (e) => {
+    const val = e.target.value.trim();
+    if (val.startsWith('VLINK|')) processIncomingPacket(val);
 });
 
-// Register Service Worker for Offline Mode
+// ==========================================
+// 6. QR & UTILS
+// ==========================================
+const qrContainer = document.getElementById("qrcode");
+const qrBtn = document.getElementById("show-qr-btn");
+let qrGenerated = false;
+
+if(qrBtn) {
+    qrBtn.addEventListener('click', () => {
+        if (qrContainer.style.display === "none") {
+            if (!qrGenerated) {
+                new QRCode(qrContainer, { text: window.location.href, width: 128, height: 128 });
+                qrGenerated = true;
+            }
+            qrContainer.style.display = "block";
+            qrBtn.innerText = "Hide QR";
+        } else {
+            qrContainer.style.display = "none";
+            qrBtn.innerText = "Share App";
+        }
+    });
+}
+
+document.getElementById('reset-receiver')?.addEventListener('click', () => {
+    reassemblyBuffer = {};
+    chatThread.innerHTML = '<div class="message system">Chat cleared.</div>';
+    addMessage("System memory reset.", "system");
+});
+
+// Service Worker
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
-      .then(reg => console.log('Offline system ready.'))
-      .catch(err => console.log('Offline system error.', err));
-  });
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').then(() => console.log("Offline Ready"));
+    });
 }
