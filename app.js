@@ -153,30 +153,70 @@ async function processIncoming(rawData) {
 // ==========================================
 // 6. ULTRA-TINY IMAGE PROCESSING (For 20 Pages)
 // ==========================================
+// fileInput.onchange = (e) => {
+//     const file = e.target.files[0];
+//     if (!file) return;
+
+//     addMessage("ULTRA-TINY: Compressing for 20-page limit...", "system");
+
+//     const reader = new FileReader();
+//     reader.onload = (event) => {
+//         const img = new Image();
+//         img.onload = () => {
+//             const canvas = document.createElement("canvas");
+//             const MAX_WIDTH = 320; // Sweet spot for 2-3 SMS per image
+//             const scaleSize = MAX_WIDTH / img.width;
+//             canvas.width = MAX_WIDTH;
+//             canvas.height = img.height * scaleSize;
+
+//             const ctx = canvas.getContext("2d");
+//            // ctx.filter = "contrast(1.5) brightness(1.1)";
+//             ctx.filter = "contrast(1.3) brightness(1.1)"; // Cleans paper background
+//             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+//             const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.1); // Ultra-low quality
+//             const cost = Math.ceil(compressedDataUrl.length / 2000);
+//             addMessage(`This image costs ${cost} SMS.`, "system");
+
+//             startSmsHandover(compressedDataUrl, true);
+//         };
+//         img.src = event.target.result;
+//     };
+//     reader.readAsDataURL(file);
+// };
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    addMessage("ULTRA-TINY: Compressing for 20-page limit...", "system");
+    addMessage("Applying High-Def Sharpener...", "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
             const canvas = document.createElement("canvas");
-            const MAX_WIDTH = 320; // Sweet spot for 2-3 SMS per image
+            
+            // 1. INCREASE WIDTH SLIGHTLY
+            // 450px is the limit for readability of tables like your photo
+            const MAX_WIDTH = 450; 
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
 
             const ctx = canvas.getContext("2d");
-           // ctx.filter = "contrast(1.5) brightness(1.1)";
-            ctx.filter = "contrast(1.3) brightness(1.1)"; // Cleans paper background
+
+            // 2. THE BLUR-KILLER FILTER
+            // We increase contrast HEAVILY to force the gray blur to become pure white
+            ctx.filter = "contrast(1.8) brightness(1.2) saturate(0)"; 
+            
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.1); // Ultra-low quality
+            // 3. QUALITY BUMP
+            // 0.15 provides 50% more detail than 0.1 with almost no extra SMS cost
+            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.15); 
+            
             const cost = Math.ceil(compressedDataUrl.length / 2000);
-            addMessage(`This image costs ${cost} SMS.`, "system");
+            addMessage(`Cost: ${cost} SMS. Table should be readable now.`, "system");
 
             startSmsHandover(compressedDataUrl, true);
         };
@@ -184,7 +224,6 @@ fileInput.onchange = (e) => {
     };
     reader.readAsDataURL(file);
 };
-
 // ==========================================
 // 7. ZOOM & PAN LOGIC
 // ==========================================
