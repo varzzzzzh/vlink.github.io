@@ -151,44 +151,13 @@ async function processIncoming(rawData) {
 }
 
 // ==========================================
-// 6. ULTRA-TINY IMAGE PROCESSING (For 20 Pages)
+// 6. DEEP-SCAN IMAGE PROCESSING (NO-BLUR)
 // ==========================================
-// fileInput.onchange = (e) => {
-//     const file = e.target.files[0];
-//     if (!file) return;
-
-//     addMessage("ULTRA-TINY: Compressing for 20-page limit...", "system");
-
-//     const reader = new FileReader();
-//     reader.onload = (event) => {
-//         const img = new Image();
-//         img.onload = () => {
-//             const canvas = document.createElement("canvas");
-//             const MAX_WIDTH = 320; // Sweet spot for 2-3 SMS per image
-//             const scaleSize = MAX_WIDTH / img.width;
-//             canvas.width = MAX_WIDTH;
-//             canvas.height = img.height * scaleSize;
-
-//             const ctx = canvas.getContext("2d");
-//            // ctx.filter = "contrast(1.5) brightness(1.1)";
-//             ctx.filter = "contrast(1.3) brightness(1.1)"; // Cleans paper background
-//             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-//             const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.1); // Ultra-low quality
-//             const cost = Math.ceil(compressedDataUrl.length / 2000);
-//             addMessage(`This image costs ${cost} SMS.`, "system");
-
-//             startSmsHandover(compressedDataUrl, true);
-//         };
-//         img.src = event.target.result;
-//     };
-//     reader.readAsDataURL(file);
-// };
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    addMessage("Scanning: High-Contrast Mono Mode...", "system");
+    addMessage("Deep Scan: Sharpening Handwriting...", "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -196,28 +165,26 @@ fileInput.onchange = (e) => {
         img.onload = () => {
             const canvas = document.createElement("canvas");
             
-            // 1. INCREASE RESOLUTION
-            // 600px is the "Safe Zone" for reading tiny names and roll numbers
-            const MAX_WIDTH = 600; 
+            // 550px is the Goldilocks zone for 20-page reading
+            const MAX_WIDTH = 550; 
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
 
             const ctx = canvas.getContext("2d");
 
-            // 2. THE SCANNER FILTER
-            // grayscale(1) kills color noise
-            // contrast(2.5) forces text to be jet black and paper to be pure white
-            ctx.filter = "grayscale(1) contrast(2.5) brightness(1.1)";
-            
+            // CRITICAL FILTERS: 
+            // 1. grayscale(1) removes color data to save space for detail
+            // 2. contrast(2.2) makes ink hard black
+            // 3. brightness(1.1) cleans the paper noise
+            ctx.filter = "grayscale(1) contrast(2.2) brightness(1.1)";
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-            // 3. QUALITY BUMP
-            // 0.2 is twice as much detail as your last test but still tiny enough for SMS
-            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.2); 
+            // PNG-style output in JPEG container (Better edges)
+            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.25); 
             
             const cost = Math.ceil(compressedDataUrl.length / 2000);
-            addMessage(`Cost: ${cost} SMS. This should be much sharper.`, "system");
+            addMessage(`Page Scan Ready. Cost: ${cost} SMS.`, "system");
 
             startSmsHandover(compressedDataUrl, true);
         };
@@ -225,6 +192,7 @@ fileInput.onchange = (e) => {
     };
     reader.readAsDataURL(file);
 };
+
 // ==========================================
 // 7. ZOOM & PAN LOGIC
 // ==========================================
@@ -241,7 +209,7 @@ function openViewer(src) {
 window.adjustZoom = (delta) => {
     currentZoom += delta;
     if (currentZoom < 1) currentZoom = 1;
-    if (currentZoom > 5) currentZoom = 5;
+    if (currentZoom > 8) currentZoom = 8; // Increased zoom limit for tiny text
     fullImg.style.transform = `scale(${currentZoom})`;
 };
 
@@ -253,7 +221,6 @@ window.resetZoom = () => {
     fullImg.style.top = "0px";
 };
 
-// Dragging functionality
 const startDrag = (e) => {
     if (currentZoom <= 1) return;
     isDragging = true;
@@ -290,6 +257,8 @@ function addMessage(content, type = "sent", isImage = false) {
         const img = document.createElement("img");
         img.src = content;
         img.style.maxWidth = "100%";
+        // Important: this prevents the browser from blurring small images
+        img.style.imageRendering = "pixelated"; 
         img.onclick = () => openViewer(content);
         div.appendChild(img);
     } else { div.innerText = content; }
