@@ -80,6 +80,10 @@ body {
     position: absolute; max-width: 90%; transition: transform 0.15s ease-out; cursor: grab;
     /* Keeps the student's text sharp even when tiny */
     image-rendering: pixelated; 
+   
+   
+    image-rendering: crisp-edges;
+
 }
 .modal-content:active { cursor: grabbing; }
 .viewer-controls { padding: 20px; display: flex; justify-content: center; gap: 10px; background: rgba(0,0,0,0.5); }

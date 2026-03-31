@@ -170,7 +170,8 @@ fileInput.onchange = (e) => {
             canvas.height = img.height * scaleSize;
 
             const ctx = canvas.getContext("2d");
-            ctx.filter = "contrast(1.5) brightness(1.1)"; // Cleans paper background
+           // ctx.filter = "contrast(1.5) brightness(1.1)";
+            ctx.filter = "contrast(1.3) brightness(1.1)"; // Cleans paper background
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
             const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.1); // Ultra-low quality
