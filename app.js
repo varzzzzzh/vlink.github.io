@@ -153,11 +153,50 @@ async function processIncoming(rawData) {
 // ==========================================
 // 6. DEEP-SCAN IMAGE PROCESSING (NO-BLUR)
 // ==========================================
+// fileInput.onchange = (e) => {
+//     const file = e.target.files[0];
+//     if (!file) return;
+
+//     addMessage("Deep Scan: Sharpening Handwriting...", "system");
+
+//     const reader = new FileReader();
+//     reader.onload = (event) => {
+//         const img = new Image();
+//         img.onload = () => {
+//             const canvas = document.createElement("canvas");
+            
+//             // 550px is the Goldilocks zone for 20-page reading
+//             const MAX_WIDTH = 550; 
+//             const scaleSize = MAX_WIDTH / img.width;
+//             canvas.width = MAX_WIDTH;
+//             canvas.height = img.height * scaleSize;
+
+//             const ctx = canvas.getContext("2d");
+
+//             // CRITICAL FILTERS: 
+//             // 1. grayscale(1) removes color data to save space for detail
+//             // 2. contrast(2.2) makes ink hard black
+//             // 3. brightness(1.1) cleans the paper noise
+//             ctx.filter = "grayscale(1) contrast(2.2) brightness(1.1)";
+//             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+//             // PNG-style output in JPEG container (Better edges)
+//             const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.25); 
+            
+//             const cost = Math.ceil(compressedDataUrl.length / 2000);
+//             addMessage(`Page Scan Ready. Cost: ${cost} SMS.`, "system");
+
+//             startSmsHandover(compressedDataUrl, true);
+//         };
+//         img.src = event.target.result;
+//     };
+//     reader.readAsDataURL(file);
+// };
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    addMessage("Deep Scan: Sharpening Handwriting...", "system");
+    addMessage("Fax Mode: Converting to 1-bit Mono...", "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -165,26 +204,36 @@ fileInput.onchange = (e) => {
         img.onload = () => {
             const canvas = document.createElement("canvas");
             
-            // 550px is the Goldilocks zone for 20-page reading
+            // Keep width at 550 for readability
             const MAX_WIDTH = 550; 
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
 
             const ctx = canvas.getContext("2d");
-
-            // CRITICAL FILTERS: 
-            // 1. grayscale(1) removes color data to save space for detail
-            // 2. contrast(2.2) makes ink hard black
-            // 3. brightness(1.1) cleans the paper noise
-            ctx.filter = "grayscale(1) contrast(2.2) brightness(1.1)";
+            
+            // 1. Initial clean
+            ctx.filter = "grayscale(1) contrast(2) brightness(1.2)";
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-            // PNG-style output in JPEG container (Better edges)
-            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.25); 
+            // 2. THE THRESHOLD MAGIC (Manually killing gray pixels)
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const pixels = imageData.data;
+            for (let i = 0; i < pixels.length; i += 4) {
+                // If the pixel is darker than mid-gray (128), make it pure black
+                // If it's lighter, make it pure white.
+                const lightness = (pixels[i] + pixels[i+1] + pixels[i+2]) / 3;
+                const v = lightness > 140 ? 255 : 0; 
+                pixels[i] = pixels[i+1] = pixels[i+2] = v;
+            }
+            ctx.putImageData(imageData, 0, 0);
+
+            // 3. ULTRA COMPRESSION
+            // Now that the image is just 2 colors, JPEG 0.1 works perfectly!
+            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.1); 
             
             const cost = Math.ceil(compressedDataUrl.length / 2000);
-            addMessage(`Page Scan Ready. Cost: ${cost} SMS.`, "system");
+            addMessage(`Fax Scan Ready. Cost: ${cost} SMS.`, "system");
 
             startSmsHandover(compressedDataUrl, true);
         };
