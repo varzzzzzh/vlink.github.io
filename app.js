@@ -188,7 +188,7 @@ fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    addMessage("Scanning Document Mode (High Sharpness)...", "system");
+    addMessage("Scanning: High-Contrast Mono Mode...", "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -196,29 +196,28 @@ fileInput.onchange = (e) => {
         img.onload = () => {
             const canvas = document.createElement("canvas");
             
-            // INCREASE WIDTH TO 500: This is the minimum for a complex table
-            const MAX_WIDTH = 500; 
+            // 1. INCREASE RESOLUTION
+            // 600px is the "Safe Zone" for reading tiny names and roll numbers
+            const MAX_WIDTH = 600; 
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
 
             const ctx = canvas.getContext("2d");
 
-            // THE "SCANNER" FILTER: 
-            // 1. grayscale(1) removes the color data weight
-            // 2. contrast(2) makes the ink black and paper white
-            // 3. brightness(1.2) kills the shadows/blur
-            ctx.filter = "grayscale(1) contrast(2) brightness(1.2)";
+            // 2. THE SCANNER FILTER
+            // grayscale(1) kills color noise
+            // contrast(2.5) forces text to be jet black and paper to be pure white
+            ctx.filter = "grayscale(1) contrast(2.5) brightness(1.1)";
             
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-            // PNG instead of JPEG? 
-            // JPEG creates "blur" (artifacts). PNG is "lossless" but bigger.
-            // We stay with JPEG but at 0.3 quality for "Hard Edges"
-            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.3); 
+            // 3. QUALITY BUMP
+            // 0.2 is twice as much detail as your last test but still tiny enough for SMS
+            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.2); 
             
             const cost = Math.ceil(compressedDataUrl.length / 2000);
-            addMessage(`Cost: ${cost} SMS. Zoom in to read the black ink.`, "system");
+            addMessage(`Cost: ${cost} SMS. This should be much sharper.`, "system");
 
             startSmsHandover(compressedDataUrl, true);
         };
