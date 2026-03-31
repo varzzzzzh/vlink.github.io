@@ -188,7 +188,7 @@ fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    addMessage("Applying High-Def Sharpener...", "system");
+    addMessage("Scanning Document Mode (High Sharpness)...", "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -196,27 +196,29 @@ fileInput.onchange = (e) => {
         img.onload = () => {
             const canvas = document.createElement("canvas");
             
-            // 1. INCREASE WIDTH SLIGHTLY
-            // 450px is the limit for readability of tables like your photo
-            const MAX_WIDTH = 450; 
+            // INCREASE WIDTH TO 500: This is the minimum for a complex table
+            const MAX_WIDTH = 500; 
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
 
             const ctx = canvas.getContext("2d");
 
-            // 2. THE BLUR-KILLER FILTER
-            // We increase contrast HEAVILY to force the gray blur to become pure white
-            ctx.filter = "contrast(1.8) brightness(1.2) saturate(0)"; 
+            // THE "SCANNER" FILTER: 
+            // 1. grayscale(1) removes the color data weight
+            // 2. contrast(2) makes the ink black and paper white
+            // 3. brightness(1.2) kills the shadows/blur
+            ctx.filter = "grayscale(1) contrast(2) brightness(1.2)";
             
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-            // 3. QUALITY BUMP
-            // 0.15 provides 50% more detail than 0.1 with almost no extra SMS cost
-            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.15); 
+            // PNG instead of JPEG? 
+            // JPEG creates "blur" (artifacts). PNG is "lossless" but bigger.
+            // We stay with JPEG but at 0.3 quality for "Hard Edges"
+            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.3); 
             
             const cost = Math.ceil(compressedDataUrl.length / 2000);
-            addMessage(`Cost: ${cost} SMS. Table should be readable now.`, "system");
+            addMessage(`Cost: ${cost} SMS. Zoom in to read the black ink.`, "system");
 
             startSmsHandover(compressedDataUrl, true);
         };
