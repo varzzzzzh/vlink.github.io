@@ -1,5 +1,13 @@
 # Village Link - Offline Multimedia Protocol
 
+Copyright (c) 2026 Varsha R
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software...
+
+The above copyright notice shall be included in all copies...
+
 ## What is Village Link?
 
 **Village Link** is an offline communication protocol that transmits multimedia files using 160-character SMS packets - no internet connection required.
@@ -38,3 +46,14 @@
 Open `https://varzzzzzh.github.io/vlink.github.io/` on your phone and click "Add to Home Screen"
 
 ## Project Structure
+vlink.github.io/
+├── index.html # Main application UI
+├── app.js # Core logic (encryption, sequencing, IndexedDB)
+├── style.css # Responsive styling
+├── sw.js # Service Worker (offline caching)
+└── manifest.json # PWA configuration
+
+
+## Author
+
+**Varsha R** (varzzzzzh)
