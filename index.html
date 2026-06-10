@@ -16,35 +16,31 @@
             <div id="friends-list"></div>
             <button id="delete-friend-btn" class="delete-btn" title="Remove Contact">×</button>
         </nav>
-
         <main id="chat-app">
             <header class="chat-header">
                 <div class="header-main">
                     <h2 id="chat-target">VLink Secure</h2>
                     <span id="status" style="font-size: 10px; color: var(--accent-green);">● Secure</span>
                 </div>
-                <div style="display: flex; gap: 8px;">
+                <div style="display: flex; gap: 8px; align-items: center;">
                     <input type="password" id="secret-key" placeholder="Key" style="width: 60px; background: #1e1f22; border: 1px solid #444; color: white; border-radius: 4px; padding: 2px 5px; font-size: 12px;">
-                    <button id="show-qr-btn" style="background:none; border:none; color:white; font-size: 12px;">QR</button>
+                    <button id="show-qr-btn" style="background:none; border:none; color:white; font-size: 12px; cursor: pointer;">QR</button>
                 </div>
             </header>
-
             <div id="qrcode" class="hidden"></div>
-
             <div id="chat-thread">
-                <div class="message system">Tap + to add a friend. Using "Ultra-Tiny" mode for 20-page limit.</div>
+                <div class="message system">📱 VLink SMS Messenger - Offline Ready</div>
+                <div class="message system">Tap + to add friend. Press 🚨 for emergency templates.</div>
             </div>
-
             <div id="packet-counter" class="hidden">0/0</div>
-
             <footer>
                 <div class="chat-input-area">
-                    <label for="file-input" style="cursor:pointer; color:var(--text-muted);">
+                    <label for="file-input" style="cursor:pointer; color:var(--text-muted);" title="Send Image">
                         <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                     </label>
                     <input type="file" id="file-input" style="display:none;" accept="image/*">
-                    <textarea id="import-input" placeholder="Message..."></textarea>
-                    <button id="chunk-btn" class="send-btn">
+                    <textarea id="import-input" placeholder="Message or paste SMS chunks..."></textarea>
+                    <button id="chunk-btn" class="send-btn" title="Send Message">
                         <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                     </button>
                 </div>
@@ -55,20 +51,18 @@
             </footer>
         </main>
     </div>
-
     <div id="image-viewer" class="modal">
         <span class="close-viewer">&times;</span>
         <div class="modal-content-wrapper" id="viewer-wrapper">
             <img class="modal-content" id="full-image" draggable="false">
         </div>
         <div class="viewer-controls">
-            <button onclick="adjustZoom(0.5)">＋</button>
-            <button onclick="adjustZoom(-0.5)">－</button>
-            <button onclick="resetZoom()">⟲</button>
+            <button onclick="adjustZoom(0.5)">＋ Zoom In</button>
+            <button onclick="adjustZoom(-0.5)">－ Zoom Out</button>
+            <button onclick="resetZoom()">⟲ Reset</button>
             <button id="download-btn">💾 Save</button>
         </div>
     </div>
-
     <script src="app.js"></script>
 </body>
 </html>
