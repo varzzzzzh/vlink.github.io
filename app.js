@@ -253,7 +253,7 @@ fileInput.onchange = (e) => {
             // ✅ FIX: Better dimensions + quality balance
             // Width: 400px = readable text + 40% smaller file
             // Height: scale proportionally
-            const MAX_WIDTH = 400; 
+            const MAX_WIDTH = 200; 
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
@@ -277,7 +277,9 @@ fileInput.onchange = (e) => {
             // ✅ FIX: Use PNG for better compression + use higher quality
             // PNG is better for text/diagrams than JPEG
             // Quality 0.15 on JPEG, or use PNG (lossless but compresses better for B&W)
-            const compressedDataUrl = canvas.toDataURL("image/png");
+            // const compressedDataUrl = canvas.toDataURL("image/png");
+            const threshold = 110;                              // Aggressive B&W
+canvas.toDataURL("image/jpeg", 0.02);              
             
             const smsBatches = Math.ceil(compressedDataUrl.length / 132);
             addMessage(
