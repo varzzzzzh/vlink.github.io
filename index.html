@@ -5,8 +5,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>VLink Mobile</title>
+    <title>VLink Mobile - Share Notes Offline</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
@@ -16,53 +17,63 @@
             <div id="friends-list"></div>
             <button id="delete-friend-btn" class="delete-btn" title="Remove Contact">×</button>
         </nav>
+
         <main id="chat-app">
             <header class="chat-header">
                 <div class="header-main">
                     <h2 id="chat-target">VLink Secure</h2>
                     <span id="status" style="font-size: 10px; color: var(--accent-green);">● Secure</span>
                 </div>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <input type="password" id="secret-key" placeholder="Key" style="width: 60px; background: #1e1f22; border: 1px solid #444; color: white; border-radius: 4px; padding: 2px 5px; font-size: 12px;">
-                    <button id="show-qr-btn" style="background:none; border:none; color:white; font-size: 12px; cursor: pointer;">QR</button>
+                <div style="display: flex; gap: 8px;">
+                    <input type="password" id="secret-key" placeholder="Key" style="width: 80px; background: #1e1f22; border: 1px solid #444; color: white; border-radius: 4px; padding: 4px 8px; font-size: 12px;">
+                    <button id="show-qr-btn" style="background:none; border:none; color:white; font-size: 12px; cursor:pointer;">QR</button>
                 </div>
             </header>
+
             <div id="qrcode" class="hidden"></div>
+
             <div id="chat-thread">
-                <div class="message system">📱 VLink SMS Messenger - Offline Ready</div>
-                <div class="message system">Tap + to add friend. Press 🚨 for emergency templates.</div>
+                <div class="message system">🎓 VLink - Share notes offline via SMS</div>
+                <div class="message system">Tap + to add a friend. Images keep their color and text clarity!</div>
             </div>
+
             <div id="packet-counter" class="hidden">0/0</div>
+
             <footer>
                 <div class="chat-input-area">
-                    <label for="file-input" style="cursor:pointer; color:var(--text-muted);" title="Send Image">
+                    <label for="file-input" class="icon-btn" title="Send Image">
                         <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                     </label>
                     <input type="file" id="file-input" style="display:none;" accept="image/*">
-                    <textarea id="import-input" placeholder="Message or paste SMS chunks..."></textarea>
+                    <button id="text-note-btn" class="icon-btn" title="Send Text Note">
+                        <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M4 6h16v2H4V6zm0 4h16v2H4v-2zm0 4h10v2H4v-2zm13 0l4 4-4 4v-3h-4v-2h4v-3z"/></svg>
+                    </button>
+                    <textarea id="import-input" placeholder="Type a message or paste VLINK| packet..."></textarea>
                     <button id="chunk-btn" class="send-btn" title="Send Message">
                         <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                     </button>
                 </div>
                 <div class="util-bar">
-                    <button id="clear-chat-btn">Clear Thread</button>
-                    <button id="reset-receiver" style="color:var(--accent-red);">Wipe App</button>
+                    <button id="clear-chat-btn">Clear Chat</button>
+                    <button id="reset-receiver" style="color:var(--accent-red);">Reset App</button>
                 </div>
             </footer>
         </main>
     </div>
+
     <div id="image-viewer" class="modal">
         <span class="close-viewer">&times;</span>
         <div class="modal-content-wrapper" id="viewer-wrapper">
             <img class="modal-content" id="full-image" draggable="false">
         </div>
         <div class="viewer-controls">
-            <button onclick="adjustZoom(0.5)">＋ Zoom In</button>
-            <button onclick="adjustZoom(-0.5)">－ Zoom Out</button>
+            <button onclick="adjustZoom(0.5)">➕ Zoom In</button>
+            <button onclick="adjustZoom(-0.5)">➖ Zoom Out</button>
             <button onclick="resetZoom()">⟲ Reset</button>
-            <button id="download-btn">💾 Save</button>
+            <button id="download-btn">💾 Save Image</button>
         </div>
     </div>
+
     <script src="app.js"></script>
 </body>
 </html>
