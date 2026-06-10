@@ -1,12 +1,28 @@
 {
   "short_name": "VLink",
-  "name": "VLink Offline Messenger",
-  "description": "Securely transfer images via SMS packets without internet.",
+  "name": "VLink Offline SMS Messenger",
+  "description": "Send text and images via SMS when internet fails. Perfect for emergencies and offline education.",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
-  "theme_color": "#007AFF",
-  "background_color": "#ffffff",
+  "orientation": "portrait-primary",
+  "theme_color": "#5865f2",
+  "background_color": "#313338",
+  "categories": ["communication", "emergency"],
+  "screenshots": [
+    {
+      "src": "icons/screenshot-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "icons/screenshot-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ],
   "icons": [
     {
       "src": "icons/icon-192.png",
@@ -23,7 +39,24 @@
     {
       "src": "icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     }
-  ]
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "media",
+          "accept": ["image/*"]
+        }
+      ]
+    }
+  }
 }
