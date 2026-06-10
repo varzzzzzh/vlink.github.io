@@ -5,7 +5,6 @@ let db;
 let reassemblyBuffer = {};
 let activeFriend = null;
 let friends = JSON.parse(localStorage.getItem("vlink_friends")) || [];
-let pendingBatch = null; // Store generated batch for copy/paste
 
 const chatThread = document.getElementById("chat-thread");
 const importInput = document.getElementById("import-input");
@@ -18,8 +17,26 @@ const fullImg = document.getElementById("full-image");
 function initApp() {
     renderFriends();
     updateStatus();
+    loadSecretKey();
 }
 initApp();
+
+// Save/load secret key
+function loadSecretKey() {
+    const savedKey = localStorage.getItem("vlink_secret_key");
+    if (savedKey && secretKeyInput) {
+        secretKeyInput.value = savedKey;
+    }
+}
+
+function saveSecretKey() {
+    if (secretKeyInput && secretKeyInput.value) {
+        localStorage.setItem("vlink_secret_key", secretKeyInput.value);
+    }
+}
+
+secretKeyInput?.addEventListener("change", saveSecretKey);
+secretKeyInput?.addEventListener("blur", saveSecretKey);
 
 // ==========================================
 // 2. SIDEBAR & CONTACTS
@@ -35,23 +52,40 @@ function renderFriends() {
         div.innerText = f.name[0].toUpperCase();
         div.onclick = () => {
             activeFriend = f;
-            document.getElementById("chat-target").innerText = `@${f.name}`;
+            const targetEl = document.getElementById("chat-target");
+            if (targetEl) targetEl.innerText = `@${f.name}`;
             renderFriends();
-            addMessage(`Secure session started with ${f.name}`, "system");
+            addMessage(`🔐 Secure session started with ${f.name}`, "system");
         };
         list.appendChild(div);
     });
 }
 
-document.getElementById("add-friend-btn").onclick = () => {
+document.getElementById("add-friend-btn")?.addEventListener("click", () => {
     const name = prompt("Friend Name:");
     const phone = prompt("Phone Number:");
     if (name && phone) {
         friends.push({ id: Date.now(), name, phone });
         localStorage.setItem("vlink_friends", JSON.stringify(friends));
         renderFriends();
+        addMessage(`✅ Added ${name} to contacts`, "system");
     }
-};
+});
+
+document.getElementById("delete-friend-btn")?.addEventListener("click", () => {
+    if (!activeFriend) {
+        addMessage("⚠️ Select a friend first to delete", "system");
+        return;
+    }
+    if (confirm(`Delete ${activeFriend.name}?`)) {
+        friends = friends.filter(f => f.id !== activeFriend.id);
+        localStorage.setItem("vlink_friends", JSON.stringify(friends));
+        activeFriend = null;
+        document.getElementById("chat-target").innerText = "VLink Secure";
+        renderFriends();
+        addMessage(`🗑️ Removed from contacts`, "system");
+    }
+});
 
 // ==========================================
 // 3. CRYPTOGRAPHY (AES-GCM)
@@ -83,119 +117,53 @@ async function decryptData(base64Data, password) {
 }
 
 // ==========================================
-// 4. SMS TRANSMISSION (FIXED FOR REAL SMS LIMIT)
+// 4. SMS TRANSMISSION
 // ==========================================
-async function startSmsHandover(data, isImage = false, fileName = "message") {
+async function startSmsHandover(data, isImage = false) {
     const password = secretKeyInput.value;
-    if (!password) return alert("Enter Passcode!");
-    if (!activeFriend) return alert("Select friend!");
-
-    let encrypted = await encryptData(data, password);
-    
-    // ✅ REAL SMS LIMIT: 160 chars per message (GSM-7)
-    // Header: "VLINK|ID:9999|SEQ:99|TOT:99|" = ~28 chars
-    // Safe payload per SMS: 160 - 28 = 132 chars (conservative)
-    const PAYLOAD_SIZE = 132;
-    const tId = Math.floor(Math.random() * 9000) + 1000;
-    const packets = [];
-    const totalPackets = Math.ceil(encrypted.length / PAYLOAD_SIZE);
-
-    // ✅ Generate all packets upfront
-    for (let i = 0; i < encrypted.length; i += PAYLOAD_SIZE) {
-        const seq = Math.floor(i / PAYLOAD_SIZE) + 1;
-        const payload = encrypted.substring(i, i + PAYLOAD_SIZE);
-        const packet = `VLINK|ID:${tId}|SEQ:${seq}|TOT:${totalPackets}|${payload}`;
-        packets.push(packet);
+    if (!password) {
+        addMessage("⚠️ Please enter a passcode first!", "system");
+        return;
+    }
+    if (!activeFriend) {
+        addMessage("⚠️ Please select a friend first!", "system");
+        return;
     }
 
-    // Store for batch display
-    pendingBatch = {
-        packets,
-        fileName,
-        isImage,
-        totalPackets,
-        tId,
-        data
-    };
+    let encrypted = await encryptData(data, password);
+    const chunkSize = 1800; // Slightly smaller for safety
+    const tId = Math.floor(Math.random() * 9000) + 1000;
+    const packets = [];
 
-    addMessage(
-        isImage ? `📷 ${fileName}: Ready to send in ${totalPackets} SMS` : `📝 ${fileName}: Ready to send in ${totalPackets} SMS`, 
-        "system"
-    );
+    for (let i = 0; i < encrypted.length; i += chunkSize) {
+        packets.push(`VLINK|ID:${tId}|SEQ:${Math.floor(i/chunkSize)+1}|TOT:${Math.ceil(encrypted.length/chunkSize)}|DATA:${encrypted.substring(i, i+chunkSize)}`);
+    }
 
-    // ✅ Show batch preview and copy UI
-    showBatchPreview(packets, totalPackets, fileName);
-}
-
-function showBatchPreview(packets, totalPackets, fileName) {
-    // Remove old batch UI if exists
-    const oldBatch = document.getElementById("batch-preview");
-    if (oldBatch) oldBatch.remove();
-
-    const batchDiv = document.createElement("div");
-    batchDiv.id = "batch-preview";
-    batchDiv.style.cssText = `
-        position: fixed; bottom: 140px; left: 10px; right: 10px;
-        background: rgba(88, 101, 242, 0.15); border: 1px solid var(--accent-blue);
-        border-radius: 12px; padding: 12px; z-index: 150;
-        font-size: 12px; color: var(--text-main);
-    `;
-
-    batchDiv.innerHTML = `
-        <div style="margin-bottom: 8px; font-weight: bold;">📦 Batch Ready (${totalPackets} SMS)</div>
-        <div style="max-height: 80px; overflow-y: auto; background: rgba(0,0,0,0.3); border-radius: 6px; padding: 8px; margin-bottom: 8px; font-family: monospace; font-size: 10px;">
-            ${packets.slice(0, 3).map(p => `<div style="word-break: break-all; margin-bottom: 4px;">${p}</div>`).join("")}
-            ${packets.length > 3 ? `<div style="color: var(--text-muted);">... (${packets.length - 3} more)</div>` : ""}
-        </div>
-        <div style="display: flex; gap: 6px;">
-            <button id="copy-batch-btn" style="flex: 1; background: var(--accent-green); border: none; color: white; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 12px;">📋 Copy All</button>
-            <button id="send-one-by-one-btn" style="flex: 1; background: var(--accent-blue); border: none; color: white; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 12px;">📱 Send One-by-One</button>
-            <button id="close-batch-btn" style="flex: 1; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 12px;">✕</button>
-        </div>
-    `;
-
-    document.body.appendChild(batchDiv);
-
-    // Copy all to clipboard
-    document.getElementById("copy-batch-btn").onclick = () => {
-        const allText = packets.join("\n");
-        navigator.clipboard.writeText(allText).then(() => {
-            addMessage(`✅ Copied all ${packets.length} SMS to clipboard!`, "system");
-            batchDiv.remove();
-        });
-    };
-
-    // Send one by one (opens SMS app for each)
-    document.getElementById("send-one-by-one-btn").onclick = () => {
-        sendBatchSequential(packets);
-        batchDiv.remove();
-    };
-
-    // Close batch UI
-    document.getElementById("close-batch-btn").onclick = () => {
-        batchDiv.remove();
-    };
-}
-
-function sendBatchSequential(packets) {
-    if (!activeFriend) return;
+    if (isImage) {
+        addMessage(`📸 Image ready: ${packets.length} SMS packets`, "system");
+    } else {
+        addMessage(data, "sent", false);
+    }
     
     let idx = 0;
-    const showNextPacket = () => {
-        if (idx < packets.length) {
-            packetCounter.innerText = `SMS ${idx + 1}/${packets.length} - Click to Send`;
-            packetCounter.classList.remove("hidden");
-            packetCounter.onclick = () => {
-                window.location.href = `sms:${activeFriend.phone}?body=${encodeURIComponent(packets[idx])}`;
-                idx++;
-                setTimeout(showNextPacket, 500);
-            };
-        } else {
-            packetCounter.innerText = "✓ Batch Sent";
-            setTimeout(() => packetCounter.classList.add("hidden"), 2000);
-        }
+    packetCounter.classList.remove("hidden");
+
+    const updateBadge = () => {
+        packetCounter.innerText = `📨 Packet ${idx + 1}/${packets.length} - Tap to Send`;
+        packetCounter.onclick = () => {
+            const smsUrl = `sms:${activeFriend.phone}?body=${encodeURIComponent(packets[idx])}`;
+            window.location.href = smsUrl;
+            idx++;
+            if (idx < packets.length) {
+                updateBadge();
+            } else {
+                packetCounter.innerText = "✅ All Packets Sent!";
+                setTimeout(() => packetCounter.classList.add("hidden"), 3000);
+                addMessage(`✅ Complete! Sent ${packets.length} SMS packets`, "system");
+            }
+        };
     };
-    showNextPacket();
+    updateBadge();
 }
 
 // ==========================================
@@ -205,44 +173,45 @@ async function processIncoming(rawData) {
     const password = secretKeyInput.value;
     if (!rawData.startsWith("VLINK|") || !password) return;
     
-    const parts = rawData.split("|");
-    if (parts.length < 5) return; // Invalid format
-    
-    const tId = parts[1].split(":")[1];
-    const seq = parseInt(parts[2].split(":")[1]);
-    const tot = parseInt(parts[3].split(":")[1]);
-    const data = parts.slice(4).join("|"); // Rest is payload
+    try {
+        const parts = rawData.split("|");
+        const tId = parts[1].split(":")[1];
+        const seq = parseInt(parts[2].split(":")[1]);
+        const tot = parseInt(parts[3].split(":")[1]);
+        const data = parts[4].replace("DATA:", "");
 
-    if (!reassemblyBuffer[tId]) reassemblyBuffer[tId] = { packets: new Array(tot).fill(null), received: 0 };
-    
-    if (reassemblyBuffer[tId].packets[seq - 1] === null) {
-        reassemblyBuffer[tId].packets[seq - 1] = data;
-        reassemblyBuffer[tId].received++;
-    }
+        if (!reassemblyBuffer[tId]) reassemblyBuffer[tId] = new Array(tot).fill(null);
+        reassemblyBuffer[tId][seq - 1] = data;
 
-    // Show progress
-    addMessage(`📥 Received packet ${seq}/${tot}`, "system");
+        const receivedCount = reassemblyBuffer[tId].filter(x => x !== null).length;
+        addMessage(`📦 Received packet ${seq}/${tot} for transfer ${tId}`, "system");
 
-    if (reassemblyBuffer[tId].received === tot) {
-        try {
-            const decrypted = await decryptData(reassemblyBuffer[tId].packets.join(""), password);
-            addMessage(decrypted, "received", decrypted.startsWith("data:image"));
-            delete reassemblyBuffer[tId];
-        } catch (e) { 
-            addMessage(`❌ Decryption Error: ${e.message}`, "system");
-            delete reassemblyBuffer[tId];
+        if (reassemblyBuffer[tId].filter(x => x !== null).length === tot) {
+            addMessage(`🔓 Complete! Reassembling ${tot} packets...`, "system");
+            try {
+                const decrypted = await decryptData(reassemblyBuffer[tId].join(""), password);
+                const isImage = decrypted.startsWith("data:image");
+                addMessage(decrypted, "received", isImage);
+                delete reassemblyBuffer[tId];
+            } catch (e) {
+                addMessage("❌ Decryption Error - Check your passcode", "system");
+                delete reassemblyBuffer[tId];
+            }
         }
+    } catch (e) {
+        console.error("Parse error:", e);
+        addMessage("⚠️ Received malformed packet", "system");
     }
 }
 
 // ==========================================
-// 6. IMPROVED IMAGE COMPRESSION (FIX BLUR)
+// 6. SMART IMAGE PROCESSING (Preserves Quality & Color)
 // ==========================================
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    addMessage("🖼️ Processing image for SMS...", "system");
+    addMessage("🎨 Processing image for SMS transmission...", "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -250,48 +219,60 @@ fileInput.onchange = (e) => {
         img.onload = () => {
             const canvas = document.createElement("canvas");
             
-            // ✅ FIX: Better dimensions + quality balance
-            // Width: 400px = readable text + 40% smaller file
-            // Height: scale proportionally
-            const MAX_WIDTH = 200; 
+            // Balanced resizing: 800px width for text readability
+            const MAX_WIDTH = 800;
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
 
-            const ctx = canvas.getContext("2d", { willReadFrequently: true });
+            const ctx = canvas.getContext("2d");
             
-            // ✅ Better contrast without destroying readability
-            ctx.filter = "grayscale(1) contrast(2) brightness(1.1)";
+            // Draw image WITH color preservation
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-            // ✅ ADAPTIVE THRESHOLDING: Smarter black/white conversion
+            
+            // Optional: Light contrast boost for text clarity (preserves color)
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const pixels = imageData.data;
+            
+            // Gentle contrast enhancement for better text readability
+            let totalBrightness = 0;
             for (let i = 0; i < pixels.length; i += 4) {
-                const lightness = (pixels[i] + pixels[i+1] + pixels[i+2]) / 3;
-                const v = lightness > 128 ? 255 : 0; // Threshold at 128 (midpoint)
-                pixels[i] = pixels[i+1] = pixels[i+2] = v;
+                totalBrightness += (pixels[i] + pixels[i+1] + pixels[i+2]) / 3;
+            }
+            const avgBrightness = totalBrightness / (pixels.length / 4);
+            const contrastFactor = 1.15;
+            
+            for (let i = 0; i < pixels.length; i += 4) {
+                // Gentle contrast adjustment
+                pixels[i] = Math.min(255, Math.max(0, (pixels[i] - avgBrightness) * contrastFactor + avgBrightness));
+                pixels[i+1] = Math.min(255, Math.max(0, (pixels[i+1] - avgBrightness) * contrastFactor + avgBrightness));
+                pixels[i+2] = Math.min(255, Math.max(0, (pixels[i+2] - avgBrightness) * contrastFactor + avgBrightness));
             }
             ctx.putImageData(imageData, 0, 0);
-
-            // ✅ FIX: Use PNG for better compression + use higher quality
-            // PNG is better for text/diagrams than JPEG
-            // Quality 0.15 on JPEG, or use PNG (lossless but compresses better for B&W)
-            // const compressedDataUrl = canvas.toDataURL("image/png");
-            const threshold = 110;                              // Aggressive B&W
-canvas.toDataURL("image/jpeg", 0.02);              
             
-            const smsBatches = Math.ceil(compressedDataUrl.length / 132);
-            addMessage(
-                smsBatches > 15 
-                    ? `⚠️ Image too large: ${smsBatches} SMS (limit: 15). Try smaller image.` 
-                    : `✅ Image optimized: ${smsBatches} SMS required`, 
-                "system"
-            );
+            // Smart compression: WebP preferred for quality/size
+            let compressedDataUrl;
+            let quality = 0.75;
             
-            if (smsBatches <= 50) { // Allow up to 50 SMS for images
-                startSmsHandover(compressedDataUrl, true, `photo_${Date.now()}`);
+            if (canvas.toDataURL("image/webp", quality).length < canvas.toDataURL("image/jpeg", 0.85).length) {
+                compressedDataUrl = canvas.toDataURL("image/webp", quality);
+                addMessage("📸 Using WebP compression (best quality/size ratio)", "system");
+            } else {
+                compressedDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+                addMessage("📸 Using JPEG compression (high quality)", "system");
             }
+            
+            const sizeKB = Math.round(compressedDataUrl.length / 1024);
+            const cost = Math.ceil(compressedDataUrl.length / 1800);
+            
+            addMessage(`✨ Image ready: ${sizeKB}KB | ${cost} SMS packet${cost > 1 ? 's' : ''}`, "system");
+            
+            if (cost > 20) {
+                const proceed = confirm(`This image will take ${cost} SMS messages to send. Continue?\n\nTip: Use smaller images for better results.`);
+                if (!proceed) return;
+            }
+            
+            startSmsHandover(compressedDataUrl, true);
         };
         img.src = event.target.result;
     };
@@ -299,86 +280,24 @@ canvas.toDataURL("image/jpeg", 0.02);
 };
 
 // ==========================================
-// 7. EMERGENCY TEMPLATES
+// 6b. TEXT-ONLY MODE for Notes
 // ==========================================
-function showEmergencyTemplates() {
-    const templates = {
-        "🚑 Medical Info": `EMERGENCY MEDICAL INFO
-Name: ___________
-Blood Type: O+
-Allergies: Penicillin
-Medications: Aspirin 100mg
-Emergency Contact: Mom +91-XXXXXXXXXX
-Location: Latitude, Longitude
-Status: [Update as needed]`,
-        
-        "🗺️ Location Share": `LOCATION REPORT
-Current Location: [Lat: 11.0168, Lng: 76.9558]
-Area: Coimbatore
-Status: SAFE/NEED HELP
-Last Update: ${new Date().toLocaleString()}
-Contact: [Phone Number]`,
-        
-        "📋 Evacuation Notice": `EVACUATION ALERT
-Area: [Location Name]
-Reason: [Flood/Fire/Disaster]
-Safe Zone: [Direction & Distance]
-Time to Evacuate: IMMEDIATELY
-Bring: Documents, Cash, Medicine`,
-        
-        "🔗 Document Share": `DOCUMENT TRANSFER REQUEST
-Document: [ID/Certificate Name]
-Recipient: [Name]
-Passcode: [Shared Separately]
-Size: Will be sent in SMS chunks
-Status: Ready to receive`,
-    };
-
-    const dlg = document.createElement("div");
-    dlg.style.cssText = `
-        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        background: var(--bg-chat); border: 2px solid var(--accent-blue);
-        border-radius: 12px; padding: 16px; z-index: 300; max-width: 90%;
-        max-height: 70vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    `;
-
-    dlg.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <h3 style="margin: 0;">🚨 Emergency Templates</h3>
-            <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer;">×</button>
-        </div>
-        <div style="display: grid; gap: 8px;">
-            ${Object.entries(templates).map(([label, content]) => `
-                <button onclick="
-                    document.getElementById('import-input').value = \`${content.replace(/`/g, '\\`')}\`;
-                    this.closest('div').parentElement.remove();
-                " style="
-                    background: rgba(88, 101, 242, 0.2); border: 1px solid var(--accent-blue);
-                    color: white; padding: 10px; border-radius: 6px; text-align: left; cursor: pointer;
-                    font-size: 13px; transition: 0.2s;
-                " onmouseover="this.style.background='rgba(88, 101, 242, 0.4)'" onmouseout="this.style.background='rgba(88, 101, 242, 0.2)'">
-                    ${label}
-                </button>
-            `).join("")}
-        </div>
-    `;
-
-    document.body.appendChild(dlg);
-}
-
-// Add emergency button to UI
-const emergencyBtn = document.createElement("button");
-emergencyBtn.innerText = "🚨 Emergency";
-emergencyBtn.style.cssText = `
-    position: absolute; bottom: 100px; right: 10px;
-    background: var(--accent-red); border: none; color: white;
-    padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; z-index: 120;
-`;
-emergencyBtn.onclick = showEmergencyTemplates;
-document.body.appendChild(emergencyBtn);
+document.getElementById("text-note-btn")?.addEventListener("click", () => {
+    const text = prompt("📝 Enter your notes or text to send:\n\n(Tip: Long text will be split into multiple SMS messages)");
+    if (text && text.trim()) {
+        if (!activeFriend) {
+            addMessage("⚠️ Please select a friend first!", "system");
+            return;
+        }
+        addMessage(`📝 Sending text note (${text.length} characters)...`, "system");
+        startSmsHandover(text.trim(), false);
+    } else if (text === "") {
+        addMessage("⚠️ Cannot send empty message", "system");
+    }
+});
 
 // ==========================================
-// 8. ZOOM & PAN (UNCHANGED)
+// 7. ZOOM & PAN for Image Viewer
 // ==========================================
 let currentZoom = 1;
 let isDragging = false;
@@ -393,14 +312,17 @@ function openViewer(src) {
 window.adjustZoom = (delta) => {
     currentZoom += delta;
     if (currentZoom < 1) currentZoom = 1;
-    if (currentZoom > 5) currentZoom = 5;
+    if (currentZoom > 4) currentZoom = 4;
     fullImg.style.transform = `scale(${currentZoom})`;
 };
 
 window.resetZoom = () => {
-    currentZoom = 1; imgLeft = 0; imgTop = 0;
+    currentZoom = 1; 
+    imgLeft = 0; 
+    imgTop = 0;
     fullImg.style.transform = `scale(1)`;
-    fullImg.style.left = "0px"; fullImg.style.top = "0px";
+    fullImg.style.left = "0px"; 
+    fullImg.style.top = "0px";
 };
 
 const startDrag = (e) => {
@@ -413,6 +335,7 @@ const startDrag = (e) => {
 
 const doDrag = (e) => {
     if (!isDragging) return;
+    e.preventDefault();
     const event = e.touches ? e.touches[0] : e;
     imgLeft = event.clientX - startX;
     imgTop = event.clientY - startY;
@@ -420,66 +343,114 @@ const doDrag = (e) => {
     fullImg.style.top = `${imgTop}px`;
 };
 
-fullImg.addEventListener("mousedown", startDrag);
-fullImg.addEventListener("touchstart", startDrag);
+fullImg?.addEventListener("mousedown", startDrag);
+fullImg?.addEventListener("touchstart", startDrag);
 window.addEventListener("mousemove", doDrag);
 window.addEventListener("touchmove", doDrag, { passive: false });
 window.addEventListener("mouseup", () => isDragging = false);
 window.addEventListener("touchend", () => isDragging = false);
 
-document.querySelector(".close-viewer").onclick = () => viewer.style.display = "none";
+document.querySelector(".close-viewer")?.addEventListener("click", () => {
+    viewer.style.display = "none";
+    resetZoom();
+});
+
+// Download button
+document.getElementById("download-btn")?.addEventListener("click", () => {
+    const link = document.createElement("a");
+    link.download = "vlink-image.jpg";
+    link.href = fullImg.src;
+    link.click();
+});
 
 // ==========================================
-// 9. HELPERS
+// 8. HELPERS & UI
 // ==========================================
 function addMessage(content, type = "sent", isImage = false) {
     const div = document.createElement("div");
     div.className = `message ${type}`;
-    if (isImage) {
+    if (isImage && content.startsWith("data:image")) {
         const img = document.createElement("img");
         img.src = content;
         img.style.maxWidth = "100%";
-        img.style.imageRendering = "crisp-edges"; 
+        img.style.borderRadius = "12px";
+        img.style.cursor = "pointer";
+        img.style.imageRendering = "auto";
         img.onclick = () => openViewer(content);
         div.appendChild(img);
-    } else { 
-        div.innerText = content; 
+        // Add caption
+        const caption = document.createElement("div");
+        caption.style.fontSize = "10px";
+        caption.style.marginTop = "4px";
+        caption.style.opacity = "0.7";
+        caption.innerText = "📸 Tap to zoom";
+        div.appendChild(caption);
+    } else {
+        div.innerText = content;
     }
     chatThread.appendChild(div);
     chatThread.scrollTop = chatThread.scrollHeight;
 }
 
-document.getElementById("chunk-btn").onclick = () => {
-    if (importInput.value.trim()) {
-        startSmsHandover(importInput.value.trim(), false, "message");
+document.getElementById("chunk-btn")?.addEventListener("click", () => {
+    const text = importInput.value.trim();
+    if (text) {
+        if (text.startsWith("VLINK|")) {
+            processIncoming(text);
+        } else {
+            if (!activeFriend) {
+                addMessage("⚠️ Please select a friend first!", "system");
+                return;
+            }
+            if (!secretKeyInput.value) {
+                addMessage("⚠️ Please enter a passcode first!", "system");
+                return;
+            }
+            startSmsHandover(text, false);
+        }
         importInput.value = "";
     }
-};
-
-importInput.addEventListener("input", (e) => {
-    if (e.target.value.startsWith("VLINK|")) processIncoming(e.target.value.trim());
 });
 
-document.getElementById("show-qr-btn").onclick = () => {
+// Auto-detect pasted VLINK packets
+importInput?.addEventListener("input", (e) => {
+    const val = e.target.value.trim();
+    if (val.startsWith("VLINK|")) {
+        processIncoming(val);
+        importInput.value = "";
+        addMessage("📥 Packet received and processed", "system");
+    }
+});
+
+document.getElementById("show-qr-btn")?.addEventListener("click", () => {
     const qr = document.getElementById("qrcode");
     qr.classList.toggle("hidden");
-    if (qr.innerHTML === "") new QRCode(qr, { text: window.location.href, width: 128, height: 128 });
-};
-
-document.getElementById("clear-chat-btn").onclick = () => {
-    if (confirm("Clear all messages?")) {
-        chatThread.innerHTML = '<div class="message system">Chat cleared. Tap + to add friend.</div>';
+    if (qr.innerHTML === "" || qr.innerHTML === "<div></div>") {
+        new QRCode(qr, { 
+            text: window.location.href, 
+            width: 128, 
+            height: 128 
+        });
     }
-};
+});
 
-document.getElementById("reset-receiver").onclick = () => {
-    if (confirm("Wipe all app data? This cannot be undone!")) {
+document.getElementById("clear-chat-btn")?.addEventListener("click", () => {
+    chatThread.innerHTML = '<div class="message system">💬 Chat cleared. Ready for new messages.</div>';
+    addMessage("Chat history cleared", "system");
+});
+
+document.getElementById("reset-receiver")?.addEventListener("click", () => {
+    if (confirm("⚠️ This will delete ALL friends, messages, and settings. Continue?")) {
         localStorage.clear();
+        friends = [];
+        activeFriend = null;
         reassemblyBuffer = {};
-        pendingBatch = null;
-        location.reload();
+        renderFriends();
+        chatThread.innerHTML = '<div class="message system">🔄 App reset. Add friends to start sharing notes.</div>';
+        if (secretKeyInput) secretKeyInput.value = "";
+        addMessage("App has been reset", "system");
     }
-};
+});
 
 function updateStatus() {
     const statusEl = document.getElementById("status");
@@ -488,3 +459,6 @@ function updateStatus() {
         statusEl.style.color = navigator.onLine ? "#23a559" : "#f23f43";
     }
 }
+
+window.addEventListener("online", updateStatus);
+window.addEventListener("offline", updateStatus);
