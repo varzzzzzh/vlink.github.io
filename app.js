@@ -5,7 +5,6 @@ let db;
 let reassemblyBuffer = {};
 let activeFriend = null;
 let friends = JSON.parse(localStorage.getItem("vlink_friends")) || [];
-let pendingImageData = null; // Store processed image before sending
 
 const chatThread = document.getElementById("chat-thread");
 const importInput = document.getElementById("import-input");
@@ -14,37 +13,12 @@ const packetCounter = document.getElementById("packet-counter");
 const fileInput = document.getElementById("file-input");
 const viewer = document.getElementById("image-viewer");
 const fullImg = document.getElementById("full-image");
-const qualitySelect = document.getElementById("image-quality");
-
-// Preview modal elements
-const previewModal = document.getElementById("preview-modal");
-const previewImage = document.getElementById("preview-image");
-const previewSize = document.getElementById("preview-size");
-const previewPackets = document.getElementById("preview-packets");
 
 function initApp() {
     renderFriends();
     updateStatus();
-    loadSecretKey();
 }
 initApp();
-
-// Save/load secret key
-function loadSecretKey() {
-    const savedKey = localStorage.getItem("vlink_secret_key");
-    if (savedKey && secretKeyInput) {
-        secretKeyInput.value = savedKey;
-    }
-}
-
-function saveSecretKey() {
-    if (secretKeyInput && secretKeyInput.value) {
-        localStorage.setItem("vlink_secret_key", secretKeyInput.value);
-    }
-}
-
-secretKeyInput?.addEventListener("change", saveSecretKey);
-secretKeyInput?.addEventListener("blur", saveSecretKey);
 
 // ==========================================
 // 2. SIDEBAR & CONTACTS
@@ -60,29 +34,27 @@ function renderFriends() {
         div.innerText = f.name[0].toUpperCase();
         div.onclick = () => {
             activeFriend = f;
-            const targetEl = document.getElementById("chat-target");
-            if (targetEl) targetEl.innerText = `@${f.name}`;
+            document.getElementById("chat-target").innerText = `@${f.name}`;
             renderFriends();
-            addMessage(`🔐 Secure session started with ${f.name}`, "system");
+            addMessage(`Secure session started with ${f.name}`, "system");
         };
         list.appendChild(div);
     });
 }
 
-document.getElementById("add-friend-btn")?.addEventListener("click", () => {
+document.getElementById("add-friend-btn").onclick = () => {
     const name = prompt("Friend Name:");
     const phone = prompt("Phone Number:");
     if (name && phone) {
         friends.push({ id: Date.now(), name, phone });
         localStorage.setItem("vlink_friends", JSON.stringify(friends));
         renderFriends();
-        addMessage(`✅ Added ${name} to contacts`, "system");
     }
-});
+};
 
-document.getElementById("delete-friend-btn")?.addEventListener("click", () => {
+document.getElementById("delete-friend-btn").onclick = () => {
     if (!activeFriend) {
-        addMessage("⚠️ Select a friend first to delete", "system");
+        addMessage("Select a friend first to delete", "system");
         return;
     }
     if (confirm(`Delete ${activeFriend.name}?`)) {
@@ -91,9 +63,9 @@ document.getElementById("delete-friend-btn")?.addEventListener("click", () => {
         activeFriend = null;
         document.getElementById("chat-target").innerText = "VLink Secure";
         renderFriends();
-        addMessage(`🗑️ Removed from contacts`, "system");
+        addMessage(`Removed ${activeFriend?.name || "contact"}`, "system");
     }
-});
+};
 
 // ==========================================
 // 3. CRYPTOGRAPHY (AES-GCM)
@@ -129,27 +101,19 @@ async function decryptData(base64Data, password) {
 // ==========================================
 async function startSmsHandover(data, isImage = false) {
     const password = secretKeyInput.value;
-    if (!password) {
-        addMessage("⚠️ Please enter a passcode first!", "system");
-        return;
-    }
-    if (!activeFriend) {
-        addMessage("⚠️ Please select a friend first!", "system");
-        return;
-    }
+    if (!password) return alert("Enter Passcode!");
+    if (!activeFriend) return alert("Select friend!");
 
     let encrypted = await encryptData(data, password);
-    const chunkSize = 1800;
-    const tId = Math.floor(Math.random() * 9000) + 1000;
+    const chunkSize = 2000;
+    const tId = Math.floor(Math.random() * 900) + 100;
     const packets = [];
 
     for (let i = 0; i < encrypted.length; i += chunkSize) {
         packets.push(`VLINK|ID:${tId}|SEQ:${Math.floor(i/chunkSize)+1}|TOT:${Math.ceil(encrypted.length/chunkSize)}|DATA:${encrypted.substring(i, i+chunkSize)}`);
     }
 
-    if (isImage) {
-        addMessage(`📸 Sending image: ${packets.length} SMS packets`, "system");
-    } else {
+    if (!isImage) {
         addMessage(data, "sent", false);
     }
     
@@ -157,17 +121,14 @@ async function startSmsHandover(data, isImage = false) {
     packetCounter.classList.remove("hidden");
 
     const updateBadge = () => {
-        packetCounter.innerText = `📨 Packet ${idx + 1}/${packets.length} - Tap to Send`;
+        packetCounter.innerText = `Part ${idx + 1}/${packets.length} - Click to Send`;
         packetCounter.onclick = () => {
-            const smsUrl = `sms:${activeFriend.phone}?body=${encodeURIComponent(packets[idx])}`;
-            window.location.href = smsUrl;
+            window.location.href = `sms:${activeFriend.phone}?body=${encodeURIComponent(packets[idx])}`;
             idx++;
-            if (idx < packets.length) {
-                updateBadge();
-            } else {
-                packetCounter.innerText = "✅ All Packets Sent!";
+            if (idx < packets.length) updateBadge();
+            else {
+                packetCounter.innerText = "Sent ✓";
                 setTimeout(() => packetCounter.classList.add("hidden"), 3000);
-                addMessage(`✅ Complete! Sent ${packets.length} SMS packets`, "system");
             }
         };
     };
@@ -180,164 +141,32 @@ async function startSmsHandover(data, isImage = false) {
 async function processIncoming(rawData) {
     const password = secretKeyInput.value;
     if (!rawData.startsWith("VLINK|") || !password) return;
-    
-    try {
-        const parts = rawData.split("|");
-        const tId = parts[1].split(":")[1];
-        const seq = parseInt(parts[2].split(":")[1]);
-        const tot = parseInt(parts[3].split(":")[1]);
-        const data = parts[4].replace("DATA:", "");
+    const parts = rawData.split("|");
+    const tId = parts[1].split(":")[1];
+    const seq = parseInt(parts[2].split(":")[1]);
+    const tot = parseInt(parts[3].split(":")[1]);
+    const data = parts[4].replace("DATA:", "");
 
-        if (!reassemblyBuffer[tId]) reassemblyBuffer[tId] = new Array(tot).fill(null);
-        reassemblyBuffer[tId][seq - 1] = data;
+    if (!reassemblyBuffer[tId]) reassemblyBuffer[tId] = new Array(tot).fill(null);
+    reassemblyBuffer[tId][seq - 1] = data;
 
-        addMessage(`📦 Received packet ${seq}/${tot}`, "system");
-
-        if (reassemblyBuffer[tId].filter(x => x !== null).length === tot) {
-            addMessage(`🔓 Complete! Reassembling ${tot} packets...`, "system");
-            try {
-                const decrypted = await decryptData(reassemblyBuffer[tId].join(""), password);
-                const isImage = decrypted.startsWith("data:image");
-                addMessage(decrypted, "received", isImage);
-                delete reassemblyBuffer[tId];
-            } catch (e) {
-                addMessage("❌ Decryption Error - Check your passcode", "system");
-                delete reassemblyBuffer[tId];
-            }
-        }
-    } catch (e) {
-        console.error("Parse error:", e);
-        addMessage("⚠️ Received malformed packet", "system");
+    if (reassemblyBuffer[tId].filter(x => x !== null).length === tot) {
+        try {
+            const decrypted = await decryptData(reassemblyBuffer[tId].join(""), password);
+            addMessage(decrypted, "received", decrypted.startsWith("data:image"));
+            delete reassemblyBuffer[tId];
+        } catch (e) { addMessage("Decryption Error", "system"); }
     }
 }
 
 // ==========================================
-// 6. IMAGE PROCESSING WITH PREVIEW
+// 6. SMART IMAGE COMPRESSION (Good Quality + Few SMS)
 // ==========================================
-// Preview Zoom/Pan variables
-let previewZoom = 1;
-let previewDragging = false;
-let previewStartX, previewStartY, previewTranslateX = 0, previewTranslateY = 0;
-let previewPinchDistance = null;
-let previewInitialZoom = 1;
-
-function updatePreviewTransform() {
-    previewImage.style.transform = `translate(${previewTranslateX}px, ${previewTranslateY}px) scale(${previewZoom})`;
-    const zoomPercent = Math.round(previewZoom * 100);
-    const zoomIndicator = document.getElementById("preview-zoom-indicator");
-    if (zoomIndicator) {
-        zoomIndicator.textContent = `${zoomPercent}%`;
-        zoomIndicator.style.opacity = "1";
-        setTimeout(() => {
-            if (zoomIndicator) zoomIndicator.style.opacity = "0";
-        }, 1000);
-    }
-}
-
-function resetPreviewZoom() {
-    previewZoom = 1;
-    previewTranslateX = 0;
-    previewTranslateY = 0;
-    updatePreviewTransform();
-}
-
-function previewZoomIn() {
-    previewZoom = Math.min(previewZoom + 0.25, 4);
-    updatePreviewTransform();
-}
-
-function previewZoomOut() {
-    previewZoom = Math.max(previewZoom - 0.25, 0.5);
-    if (previewZoom === 1) {
-        previewTranslateX = 0;
-        previewTranslateY = 0;
-    }
-    updatePreviewTransform();
-}
-
-function startPreviewDrag(e) {
-    if (previewZoom <= 1) return;
-    e.preventDefault();
-    previewDragging = true;
-    const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
-    const clientY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
-    previewStartX = clientX - previewTranslateX;
-    previewStartY = clientY - previewTranslateY;
-}
-
-function doPreviewDrag(e) {
-    if (!previewDragging) return;
-    e.preventDefault();
-    const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
-    const clientY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
-    previewTranslateX = clientX - previewStartX;
-    previewTranslateY = clientY - previewStartY;
-    updatePreviewTransform();
-}
-
-function endPreviewDrag() {
-    previewDragging = false;
-}
-
-function handlePreviewTouchStart(e) {
-    if (e.touches.length === 2) {
-        e.preventDefault();
-        const touch1 = e.touches[0];
-        const touch2 = e.touches[1];
-        previewPinchDistance = Math.hypot(
-            touch1.clientX - touch2.clientX,
-            touch1.clientY - touch2.clientY
-        );
-        previewInitialZoom = previewZoom;
-    } else if (e.touches.length === 1) {
-        startPreviewDrag(e);
-    }
-}
-
-function handlePreviewTouchMove(e) {
-    if (e.touches.length === 2 && previewPinchDistance) {
-        e.preventDefault();
-        const touch1 = e.touches[0];
-        const touch2 = e.touches[1];
-        const currentDistance = Math.hypot(
-            touch1.clientX - touch2.clientX,
-            touch1.clientY - touch2.clientY
-        );
-        const scale = currentDistance / previewPinchDistance;
-        previewZoom = Math.min(Math.max(previewInitialZoom * scale, 0.5), 4);
-        updatePreviewTransform();
-    } else if (e.touches.length === 1) {
-        doPreviewDrag(e);
-    }
-}
-
-// Attach preview event listeners
-previewImage?.addEventListener("mousedown", startPreviewDrag);
-previewImage?.addEventListener("touchstart", handlePreviewTouchStart);
-window.addEventListener("mousemove", doPreviewDrag);
-window.addEventListener("touchmove", handlePreviewTouchMove, { passive: false });
-window.addEventListener("mouseup", endPreviewDrag);
-window.addEventListener("touchend", endPreviewDrag);
-
-document.getElementById("preview-zoom-in")?.addEventListener("click", previewZoomIn);
-document.getElementById("preview-zoom-out")?.addEventListener("click", previewZoomOut);
-document.getElementById("preview-reset")?.addEventListener("click", resetPreviewZoom);
-
-function closePreviewModal() {
-    previewModal.style.display = "none";
-    resetPreviewZoom();
-    pendingImageData = null;
-}
-
-// Process image and show preview
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const quality = parseFloat(qualitySelect?.value || 0.9);
-    const qualityLabel = qualitySelect?.options[qualitySelect.selectedIndex]?.text || "High Quality";
-    
-    addMessage(`🎨 Processing image for preview...`, "system");
+    addMessage("📸 Processing image with smart compression...", "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -345,314 +174,201 @@ fileInput.onchange = (e) => {
         img.onload = () => {
             const canvas = document.createElement("canvas");
             
-            // Optional resize only if extremely large
-            let targetWidth = img.width;
-            let targetHeight = img.height;
-            
-            if (img.width > 2000) {
-                const scale = 2000 / img.width;
-                targetWidth = 2000;
-                targetHeight = img.height * scale;
-            }
-            
-            canvas.width = targetWidth;
-            canvas.height = targetHeight;
+            // SMART RESIZING - 800px for good readability
+            const MAX_WIDTH = 800;
+            const scaleSize = MAX_WIDTH / img.width;
+            canvas.width = MAX_WIDTH;
+            canvas.height = img.height * scaleSize;
 
             const ctx = canvas.getContext("2d");
+            
+            // Draw image normally (preserves colors)
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             
-            // Choose format
-            let compressedDataUrl;
-            let format = "image/jpeg";
+            // Optional: Gentle contrast for better text readability
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const pixels = imageData.data;
             
-            if (file.type === "image/png" || (img.width * img.height < 500000)) {
-                format = "image/png";
-                compressedDataUrl = canvas.toDataURL(format);
-            } else {
-                compressedDataUrl = canvas.toDataURL(format, quality);
+            // Gentle contrast boost (1.1x) - helps text without ruining image
+            for (let i = 0; i < pixels.length; i += 4) {
+                pixels[i] = Math.min(255, Math.max(0, (pixels[i] - 128) * 1.1 + 128));
+                pixels[i+1] = Math.min(255, Math.max(0, (pixels[i+1] - 128) * 1.1 + 128));
+                pixels[i+2] = Math.min(255, Math.max(0, (pixels[i+2] - 128) * 1.1 + 128));
+            }
+            ctx.putImageData(imageData, 0, 0);
+            
+            // SMART COMPRESSION: Use WebP for smaller files
+            let compressedDataUrl;
+            
+            // Try WebP first (30% smaller than JPEG)
+            try {
+                compressedDataUrl = canvas.toDataURL("image/webp", 0.65);
+                addMessage("🎨 Using WebP compression (better quality/size)", "system");
+            } catch(e) {
+                compressedDataUrl = canvas.toDataURL("image/jpeg", 0.75);
+                addMessage("🎨 Using JPEG compression", "system");
             }
             
             const sizeKB = Math.round(compressedDataUrl.length / 1024);
             const originalSizeKB = Math.round(file.size / 1024);
-            const cost = Math.ceil(compressedDataUrl.length / 1800);
+            const cost = Math.ceil(compressedDataUrl.length / 2000);
             
-            // Store for sending
-            pendingImageData = compressedDataUrl;
+            addMessage(`✨ Image ready: ${sizeKB}KB (was ${originalSizeKB}KB) | ${cost} SMS messages`, "system");
             
-            // Show preview modal
-            previewImage.src = compressedDataUrl;
-            previewSize.innerHTML = `📊 Size: ${sizeKB}KB (was ${originalSizeKB}KB)`;
-            previewPackets.innerHTML = `📨 SMS Packets: ${cost}`;
-            previewModal.style.display = "flex";
-            resetPreviewZoom();
+            // Ask user if they want to proceed
+            if (cost > 12) {
+                const proceed = confirm(`⚠️ This image will take ${cost} SMS messages.\nSize: ${sizeKB}KB\n\nContinue? (Cancel to choose smaller image)`);
+                if (!proceed) return;
+            }
             
-            addMessage(`👁️ Preview ready. Check image before sending.`, "system");
+            startSmsHandover(compressedDataUrl, true);
         };
         img.src = event.target.result;
     };
     reader.readAsDataURL(file);
 };
 
-// Confirm send from preview
-document.getElementById("confirm-send-btn")?.addEventListener("click", () => {
-    if (pendingImageData) {
-        closePreviewModal();
-        startSmsHandover(pendingImageData, true);
-        fileInput.value = ""; // Clear so same file can be selected again
-    }
-});
-
-// Cancel send from preview
-document.getElementById("cancel-send-btn")?.addEventListener("click", () => {
-    closePreviewModal();
-    addMessage(`❌ Image sending cancelled`, "system");
-    fileInput.value = "";
-});
-
-document.querySelector(".close-preview")?.addEventListener("click", closePreviewModal);
-
 // ==========================================
-// 6b. TEXT-ONLY MODE
+// 6b. SEND AS TEXT (1 SMS, perfect quality)
 // ==========================================
-document.getElementById("text-note-btn")?.addEventListener("click", () => {
-    const text = prompt("📝 Enter your notes or text to send:");
+document.getElementById("text-note-btn").onclick = () => {
+    const text = prompt("📝 Enter your notes/text to send:\n\n(1 SMS, perfect quality)");
     if (text && text.trim()) {
         if (!activeFriend) {
-            addMessage("⚠️ Please select a friend first!", "system");
+            addMessage("⚠️ Select a friend first!", "system");
             return;
         }
         if (!secretKeyInput.value) {
-            addMessage("⚠️ Please enter a passcode first!", "system");
+            addMessage("⚠️ Enter passcode first!", "system");
             return;
         }
-        addMessage(`📝 Sending text note (${text.length} characters)...`, "system");
+        addMessage(`📝 Sending text (${text.length} characters)...`, "system");
         startSmsHandover(text.trim(), false);
     }
-});
+};
 
 // ==========================================
-// 7. FULL ZOOM & PAN SYSTEM (For received images)
+// 7. ZOOM & PAN
 // ==========================================
 let currentZoom = 1;
 let isDragging = false;
-let startX, startY, translateX = 0, translateY = 0;
-let initialPinchDistance = null;
-let initialZoom = 1;
+let startX, startY, imgLeft = 0, imgTop = 0;
 
-function updateImageTransform() {
-    fullImg.style.transform = `translate(${translateX}px, ${translateY}px) scale(${currentZoom})`;
-    const zoomPercent = Math.round(currentZoom * 100);
-    const zoomIndicator = document.getElementById("zoom-indicator");
-    if (zoomIndicator) {
-        zoomIndicator.textContent = `${zoomPercent}%`;
-        zoomIndicator.style.opacity = "1";
-        setTimeout(() => {
-            if (zoomIndicator) zoomIndicator.style.opacity = "0";
-        }, 1000);
-    }
-}
-
-function resetZoom() {
-    currentZoom = 1;
-    translateX = 0;
-    translateY = 0;
-    updateImageTransform();
-}
-
-function zoomIn() {
-    currentZoom = Math.min(currentZoom + 0.25, 4);
-    updateImageTransform();
-}
-
-function zoomOut() {
-    currentZoom = Math.max(currentZoom - 0.25, 0.5);
-    if (currentZoom === 1) {
-        translateX = 0;
-        translateY = 0;
-    }
-    updateImageTransform();
-}
-
-function startDrag(e) {
-    if (currentZoom <= 1) return;
-    e.preventDefault();
-    isDragging = true;
-    const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
-    const clientY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
-    startX = clientX - translateX;
-    startY = clientY - translateY;
-}
-
-function doDrag(e) {
-    if (!isDragging) return;
-    e.preventDefault();
-    const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
-    const clientY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
-    translateX = clientX - startX;
-    translateY = clientY - startY;
-    updateImageTransform();
-}
-
-function endDrag() {
-    isDragging = false;
-}
-
-function handleTouchStart(e) {
-    if (e.touches.length === 2) {
-        e.preventDefault();
-        const touch1 = e.touches[0];
-        const touch2 = e.touches[1];
-        initialPinchDistance = Math.hypot(
-            touch1.clientX - touch2.clientX,
-            touch1.clientY - touch2.clientY
-        );
-        initialZoom = currentZoom;
-    } else if (e.touches.length === 1) {
-        startDrag(e);
-    }
-}
-
-function handleTouchMove(e) {
-    if (e.touches.length === 2 && initialPinchDistance) {
-        e.preventDefault();
-        const touch1 = e.touches[0];
-        const touch2 = e.touches[1];
-        const currentDistance = Math.hypot(
-            touch1.clientX - touch2.clientX,
-            touch1.clientY - touch2.clientY
-        );
-        const scale = currentDistance / initialPinchDistance;
-        currentZoom = Math.min(Math.max(initialZoom * scale, 0.5), 4);
-        updateImageTransform();
-    } else if (e.touches.length === 1) {
-        doDrag(e);
-    }
-}
-
-function openImageViewer(imageSrc) {
+function openViewer(src) {
     viewer.style.display = "flex";
-    fullImg.src = imageSrc;
+    fullImg.src = src;
     resetZoom();
 }
 
-function closeViewer() {
-    viewer.style.display = "none";
-    resetZoom();
-}
+window.adjustZoom = (delta) => {
+    currentZoom += delta;
+    if (currentZoom < 1) currentZoom = 1;
+    if (currentZoom > 4) currentZoom = 4;
+    fullImg.style.transform = `scale(${currentZoom})`;
+};
 
-fullImg?.addEventListener("mousedown", startDrag);
-fullImg?.addEventListener("touchstart", handleTouchStart);
+window.resetZoom = () => {
+    currentZoom = 1; imgLeft = 0; imgTop = 0;
+    fullImg.style.transform = `scale(1)`;
+    fullImg.style.left = "0px"; fullImg.style.top = "0px";
+};
+
+const startDrag = (e) => {
+    if (currentZoom <= 1) return;
+    isDragging = true;
+    const event = e.touches ? e.touches[0] : e;
+    startX = event.clientX - imgLeft;
+    startY = event.clientY - imgTop;
+};
+
+const doDrag = (e) => {
+    if (!isDragging) return;
+    const event = e.touches ? e.touches[0] : e;
+    imgLeft = event.clientX - startX;
+    imgTop = event.clientY - startY;
+    fullImg.style.left = `${imgLeft}px`;
+    fullImg.style.top = `${imgTop}px`;
+};
+
+fullImg.addEventListener("mousedown", startDrag);
+fullImg.addEventListener("touchstart", startDrag);
 window.addEventListener("mousemove", doDrag);
-window.addEventListener("touchmove", handleTouchMove, { passive: false });
-window.addEventListener("mouseup", endDrag);
-window.addEventListener("touchend", endDrag);
+window.addEventListener("touchmove", doDrag, { passive: false });
+window.addEventListener("mouseup", () => isDragging = false);
+window.addEventListener("touchend", () => isDragging = false);
 
-document.getElementById("zoom-in-btn")?.addEventListener("click", zoomIn);
-document.getElementById("zoom-out-btn")?.addEventListener("click", zoomOut);
-document.getElementById("reset-view-btn")?.addEventListener("click", resetZoom);
-document.querySelector(".close-viewer")?.addEventListener("click", closeViewer);
+document.querySelector(".close-viewer").onclick = () => viewer.style.display = "none";
 
-document.getElementById("download-btn")?.addEventListener("click", () => {
+document.getElementById("download-btn").onclick = () => {
     if (fullImg.src) {
         const link = document.createElement("a");
-        const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-        link.download = `vlink-image-${timestamp}.jpg`;
+        link.download = "vlink-image.jpg";
         link.href = fullImg.src;
         link.click();
-        addMessage("💾 Image saved to device", "system");
+        addMessage("💾 Image saved", "system");
     }
-});
+};
 
 // ==========================================
-// 8. HELPERS & UI
+// 8. HELPERS
 // ==========================================
 function addMessage(content, type = "sent", isImage = false) {
     const div = document.createElement("div");
     div.className = `message ${type}`;
-    
-    if (isImage && content.startsWith("data:image")) {
+    if (isImage) {
         const img = document.createElement("img");
         img.src = content;
         img.style.maxWidth = "100%";
         img.style.maxHeight = "300px";
-        img.style.borderRadius = "12px";
+        img.style.borderRadius = "8px";
         img.style.cursor = "pointer";
-        img.style.objectFit = "contain";
-        img.onclick = () => openImageViewer(content);
+        img.onclick = () => openViewer(content);
         div.appendChild(img);
-        
         const caption = document.createElement("div");
         caption.style.fontSize = "10px";
         caption.style.marginTop = "4px";
         caption.style.opacity = "0.7";
-        caption.innerText = "🔍 Tap image to zoom & pan";
+        caption.innerText = "🔍 Tap to zoom";
         div.appendChild(caption);
-    } else {
-        div.innerText = content;
+    } else { 
+        div.innerText = content; 
     }
-    
     chatThread.appendChild(div);
     chatThread.scrollTop = chatThread.scrollHeight;
 }
 
-document.getElementById("chunk-btn")?.addEventListener("click", () => {
-    const text = importInput.value.trim();
-    if (text) {
-        if (text.startsWith("VLINK|")) {
-            processIncoming(text);
-        } else {
-            if (!activeFriend) {
-                addMessage("⚠️ Please select a friend first!", "system");
-                return;
-            }
-            if (!secretKeyInput.value) {
-                addMessage("⚠️ Please enter a passcode first!", "system");
-                return;
-            }
-            startSmsHandover(text, false);
-        }
+document.getElementById("chunk-btn").onclick = () => {
+    if (importInput.value.trim()) {
+        startSmsHandover(importInput.value.trim());
         importInput.value = "";
     }
+};
+
+importInput.addEventListener("input", (e) => {
+    if (e.target.value.startsWith("VLINK|")) processIncoming(e.target.value.trim());
 });
 
-importInput?.addEventListener("input", (e) => {
-    const val = e.target.value.trim();
-    if (val.startsWith("VLINK|")) {
-        processIncoming(val);
-        importInput.value = "";
-        addMessage("📥 Packet received and processed", "system");
-    }
-});
-
-document.getElementById("show-qr-btn")?.addEventListener("click", () => {
+document.getElementById("show-qr-btn").onclick = () => {
     const qr = document.getElementById("qrcode");
     qr.classList.toggle("hidden");
-    if (qr.innerHTML === "" || qr.innerHTML === "<div></div>") {
-        new QRCode(qr, { 
-            text: window.location.href, 
-            width: 128, 
-            height: 128 
-        });
-    }
-});
+    if (qr.innerHTML === "") new QRCode(qr, { text: window.location.href, width: 128, height: 128 });
+};
 
-document.getElementById("clear-chat-btn")?.addEventListener("click", () => {
-    chatThread.innerHTML = '<div class="message system">💬 Chat cleared. Ready for new messages.</div>';
-    addMessage("Chat cleared", "system");
-});
+document.getElementById("clear-chat-btn").onclick = () => {
+    chatThread.innerHTML = '<div class="message system">Chat cleared.</div>';
+};
 
-document.getElementById("reset-receiver")?.addEventListener("click", () => {
-    if (confirm("⚠️ This will delete ALL friends, messages, and settings. Continue?")) {
+document.getElementById("reset-receiver").onclick = () => {
+    if (confirm("Delete all data?")) {
         localStorage.clear();
         friends = [];
         activeFriend = null;
         reassemblyBuffer = {};
         renderFriends();
-        chatThread.innerHTML = '<div class="message system">🔄 App reset. Add friends to start sharing notes.</div>';
-        if (secretKeyInput) secretKeyInput.value = "";
-        addMessage("App has been reset", "system");
+        chatThread.innerHTML = '<div class="message system">App reset. Add friends to start.</div>';
+        addMessage("App reset", "system");
     }
-});
+};
 
 function updateStatus() {
     const statusEl = document.getElementById("status");
