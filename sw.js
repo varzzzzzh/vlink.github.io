@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vlink-student-v6';
+const CACHE_NAME = 'vlink-student-v8';
 
 const ASSETS = [
     './',
