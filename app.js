@@ -113,7 +113,9 @@ async function startSmsHandover(data, isImage = false) {
         packets.push(`VLINK|ID:${tId}|SEQ:${Math.floor(i/chunkSize)+1}|TOT:${Math.ceil(encrypted.length/chunkSize)}|DATA:${encrypted.substring(i, i+chunkSize)}`);
     }
 
-    if (!isImage) {
+    if (isImage) {
+        addMessage(`📸 Image ready: ${packets.length} SMS messages`, "system");
+    } else {
         addMessage(data, "sent", false);
     }
     
@@ -150,24 +152,30 @@ async function processIncoming(rawData) {
     if (!reassemblyBuffer[tId]) reassemblyBuffer[tId] = new Array(tot).fill(null);
     reassemblyBuffer[tId][seq - 1] = data;
 
+    addMessage(`📦 Received packet ${seq}/${tot}`, "system");
+
     if (reassemblyBuffer[tId].filter(x => x !== null).length === tot) {
+        addMessage(`🔓 Complete! Reassembling ${tot} packets...`, "system");
         try {
             const decrypted = await decryptData(reassemblyBuffer[tId].join(""), password);
             const isImage = decrypted.startsWith("data:image");
             addMessage(decrypted, "received", isImage);
             delete reassemblyBuffer[tId];
-        } catch (e) { addMessage("Decryption Error", "system"); }
+        } catch (e) { 
+            addMessage("❌ Decryption Error - Check your passcode", "system");
+            delete reassemblyBuffer[tId];
+        }
     }
 }
 
 // ==========================================
-// 6. BETTER IMAGE QUALITY (No grayscale, No 1-bit)
+// 6. IMAGE PROCESSING (Good Quality, Fewer SMS)
 // ==========================================
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    addMessage("Processing image for SMS...", "system");
+    addMessage("📸 Processing image...", "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -175,36 +183,36 @@ fileInput.onchange = (e) => {
         img.onload = () => {
             const canvas = document.createElement("canvas");
             
-            // Balance: 600px for text readability
-            const MAX_WIDTH = 600;
+            // 500px width - good balance for text readability
+            const MAX_WIDTH = 500;
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
 
             const ctx = canvas.getContext("2d");
-            
-            // DRAW NORMALLY (NO grayscale, NO extreme filters)
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             
-            // Gentle contrast for text (keeps color)
+            // Gentle contrast for text clarity
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const pixels = imageData.data;
             for (let i = 0; i < pixels.length; i += 4) {
-                pixels[i] = Math.min(255, Math.max(0, (pixels[i] - 128) * 1.2 + 128));
-                pixels[i+1] = Math.min(255, Math.max(0, (pixels[i+1] - 128) * 1.2 + 128));
-                pixels[i+2] = Math.min(255, Math.max(0, (pixels[i+2] - 128) * 1.2 + 128));
+                pixels[i] = Math.min(255, Math.max(0, (pixels[i] - 128) * 1.25 + 128));
+                pixels[i+1] = Math.min(255, Math.max(0, (pixels[i+1] - 128) * 1.25 + 128));
+                pixels[i+2] = Math.min(255, Math.max(0, (pixels[i+2] - 128) * 1.25 + 128));
             }
             ctx.putImageData(imageData, 0, 0);
             
-            // Quality compression
-            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.7);
+            // Compress to JPEG
+            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.65);
             
             const sizeKB = Math.round(compressedDataUrl.length / 1024);
             const cost = Math.ceil(compressedDataUrl.length / 2000);
-            addMessage(`Image ready: ${sizeKB}KB | ${cost} SMS messages`, "system");
+            addMessage(`✨ Image ready: ${sizeKB}KB | ${cost} SMS messages`, "system");
             
-            // Auto-send with preview in chat (like original)
+            // Show image directly in chat (SENDER sees it)
             addMessage(compressedDataUrl, "sent", true);
+            
+            // Send via SMS
             startSmsHandover(compressedDataUrl, true);
         };
         img.src = event.target.result;
@@ -215,19 +223,24 @@ fileInput.onchange = (e) => {
 // ==========================================
 // 7. TEXT SEND BUTTON (For notes - 1 SMS)
 // ==========================================
-// Add text send button dynamically
+// Add text send button
 if (!document.getElementById("text-send-btn")) {
     const textBtn = document.createElement("button");
     textBtn.id = "text-send-btn";
     textBtn.innerHTML = "📝";
-    textBtn.title = "Send as Text (1 SMS)";
-    textBtn.style.cssText = "background:none; border:none; color:var(--accent-green); cursor:pointer; font-size:20px; margin-right:5px;";
-    const label = document.querySelector(".chat-input-area label");
-    if (label) {
-        label.parentNode.insertBefore(textBtn, label.nextSibling);
+    textBtn.title = "Send as Text (1 SMS) - Perfect for notes";
+    textBtn.style.cssText = "background:none; border:none; color:var(--accent-green); cursor:pointer; font-size:20px; padding:8px; border-radius:50%;";
+    const inputArea = document.querySelector(".chat-input-area");
+    if (inputArea) {
+        const label = inputArea.querySelector("label");
+        if (label) {
+            label.parentNode.insertBefore(textBtn, label.nextSibling);
+        } else {
+            inputArea.insertBefore(textBtn, inputArea.firstChild);
+        }
     }
     textBtn.onclick = () => {
-        const text = prompt("📝 Enter your notes/text to send:\n\n(1 SMS, perfect quality)");
+        const text = prompt("📝 PASTE YOUR NOTES HERE:\n\n(1 SMS, perfect quality, readable immediately!)\n\nExample: Your textbook notes, study material, etc.");
         if (text && text.trim()) {
             if (!activeFriend) {
                 addMessage("⚠️ Select a friend first!", "system");
@@ -237,14 +250,14 @@ if (!document.getElementById("text-send-btn")) {
                 addMessage("⚠️ Enter passcode first!", "system");
                 return;
             }
-            addMessage(`📝 Sending text (${text.length} characters)...`, "system");
+            addMessage(`📝 Text note (${text.length} chars)`, "sent", false);
             startSmsHandover(text.trim(), false);
         }
     };
 }
 
 // ==========================================
-// 8. ZOOM & PAN (ORIGINAL WORKING VERSION)
+// 8. ZOOM & PAN (Working for BOTH sender and receiver)
 // ==========================================
 let currentZoom = 1;
 let isDragging = false;
@@ -318,42 +331,72 @@ document.getElementById("download-btn").onclick = () => {
 };
 
 // ==========================================
-// 9. HELPERS
+// 9. ADD MESSAGE TO CHAT (Image visible in chat)
 // ==========================================
 function addMessage(content, type = "sent", isImage = false) {
     const div = document.createElement("div");
     div.className = `message ${type}`;
-    if (isImage && content.startsWith("data:image")) {
+    
+    if (isImage && content && content.startsWith("data:image")) {
+        // Create image element that appears directly in chat
         const img = document.createElement("img");
         img.src = content;
         img.style.maxWidth = "100%";
-        img.style.maxHeight = "250px";
-        img.style.borderRadius = "8px";
+        img.style.maxHeight = "300px";
+        img.style.borderRadius = "12px";
         img.style.cursor = "pointer";
+        img.style.margin = "5px 0";
+        img.style.border = "1px solid #444";
         img.onclick = () => openViewer(content);
         div.appendChild(img);
+        
+        // Add caption
         const caption = document.createElement("div");
-        caption.style.fontSize = "10px";
-        caption.style.marginTop = "4px";
-        caption.style.opacity = "0.7";
-        caption.innerText = "🔍 Tap image to zoom & pan";
+        caption.style.fontSize = "11px";
+        caption.style.marginTop = "5px";
+        caption.style.opacity = "0.8";
+        caption.style.display = "flex";
+        caption.style.gap = "10px";
+        caption.innerHTML = `🔍 Click image to open viewer | ${type === "sent" ? "📤 Sent" : "📥 Received"}`;
         div.appendChild(caption);
     } else {
         div.innerText = content;
     }
+    
     chatThread.appendChild(div);
     chatThread.scrollTop = chatThread.scrollHeight;
 }
 
+// ==========================================
+// 10. OTHER EVENT HANDLERS
+// ==========================================
 document.getElementById("chunk-btn").onclick = () => {
-    if (importInput.value.trim()) {
-        startSmsHandover(importInput.value.trim());
+    const text = importInput.value.trim();
+    if (text) {
+        if (text.startsWith("VLINK|")) {
+            processIncoming(text);
+        } else {
+            if (!activeFriend) {
+                addMessage("⚠️ Select a friend first!", "system");
+                return;
+            }
+            if (!secretKeyInput.value) {
+                addMessage("⚠️ Enter passcode first!", "system");
+                return;
+            }
+            startSmsHandover(text, false);
+        }
         importInput.value = "";
     }
 };
 
 importInput.addEventListener("input", (e) => {
-    if (e.target.value.startsWith("VLINK|")) processIncoming(e.target.value.trim());
+    const val = e.target.value.trim();
+    if (val.startsWith("VLINK|")) {
+        processIncoming(val);
+        importInput.value = "";
+        addMessage("📥 Packet processed", "system");
+    }
 });
 
 document.getElementById("show-qr-btn").onclick = () => {
@@ -363,17 +406,19 @@ document.getElementById("show-qr-btn").onclick = () => {
 };
 
 document.getElementById("clear-chat-btn").onclick = () => {
-    chatThread.innerHTML = '<div class="message system">Chat cleared.</div>';
+    chatThread.innerHTML = '<div class="message system">💬 Chat cleared.</div>';
 };
 
 document.getElementById("reset-receiver").onclick = () => {
-    if (confirm("Delete all data?")) {
+    if (confirm("⚠️ Delete ALL data? Friends, messages, and settings will be lost.")) {
         localStorage.clear();
         friends = [];
         activeFriend = null;
         reassemblyBuffer = {};
         renderFriends();
-        chatThread.innerHTML = '<div class="message system">App reset. Add friends to start.</div>';
+        chatThread.innerHTML = '<div class="message system">🔄 App reset. Add friends to start sharing.</div>';
+        if (secretKeyInput) secretKeyInput.value = "";
+        addMessage("App has been reset", "system");
     }
 };
 
