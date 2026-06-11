@@ -5,7 +5,6 @@ let db;
 let reassemblyBuffer = {};
 let activeFriend = null;
 let friends = JSON.parse(localStorage.getItem("vlink_friends")) || [];
-let pendingImageData = null;
 
 const chatThread = document.getElementById("chat-thread");
 const importInput = document.getElementById("import-input");
@@ -162,133 +161,14 @@ async function processIncoming(rawData) {
 }
 
 // ==========================================
-// 6. SMART IMAGE COMPRESSION with PREVIEW
+// 6. SMART IMAGE COMPRESSION (Good Quality + Few SMS)
 // ==========================================
-function showImagePreview(imageDataUrl, fileSize) {
-    // Create preview modal if it doesn't exist
-    let previewModal = document.getElementById("preview-modal");
-    if (!previewModal) {
-        previewModal = document.createElement("div");
-        previewModal.id = "preview-modal";
-        previewModal.className = "modal";
-        previewModal.innerHTML = `
-            <span class="close-preview" style="position:absolute; top:20px; right:25px; color:white; font-size:35px; cursor:pointer;">&times;</span>
-            <div class="modal-content-wrapper" style="flex:1; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center;">
-                <img id="preview-img" class="modal-content" style="position:absolute; max-width:90%; cursor:grab;">
-            </div>
-            <div style="padding:15px; display:flex; justify-content:center; gap:10px; background:rgba(0,0,0,0.8);">
-                <button id="preview-zoom-in" style="background:#5865f2; color:white; border:none; padding:10px 18px; border-radius:8px; cursor:pointer;">🔍 Zoom In</button>
-                <button id="preview-zoom-out" style="background:#5865f2; color:white; border:none; padding:10px 18px; border-radius:8px; cursor:pointer;">🔍 Zoom Out</button>
-                <button id="preview-reset" style="background:#5865f2; color:white; border:none; padding:10px 18px; border-radius:8px; cursor:pointer;">⟲ Reset</button>
-                <button id="confirm-send" style="background:#23a559; color:white; border:none; padding:10px 18px; border-radius:8px; cursor:pointer;">✅ Send Image</button>
-                <button id="cancel-send" style="background:#da373c; color:white; border:none; padding:10px 18px; border-radius:8px; cursor:pointer;">❌ Cancel</button>
-            </div>
-        `;
-        document.body.appendChild(previewModal);
-    }
-    
-    const previewImg = document.getElementById("preview-img");
-    previewImg.src = imageDataUrl;
-    previewModal.style.display = "flex";
-    
-    // Preview zoom variables
-    let previewZoom = 1;
-    let isPreviewDragging = false;
-    let previewStartX, previewStartY, previewLeft = 0, previewTop = 0;
-    
-    function updatePreviewTransform() {
-        previewImg.style.transform = `scale(${previewZoom})`;
-        previewImg.style.left = `${previewLeft}px`;
-        previewImg.style.top = `${previewTop}px`;
-    }
-    
-    function resetPreviewZoom() {
-        previewZoom = 1;
-        previewLeft = 0;
-        previewTop = 0;
-        updatePreviewTransform();
-    }
-    
-    document.getElementById("preview-zoom-in").onclick = () => {
-        previewZoom = Math.min(previewZoom + 0.25, 4);
-        updatePreviewTransform();
-    };
-    
-    document.getElementById("preview-zoom-out").onclick = () => {
-        previewZoom = Math.max(previewZoom - 0.25, 0.5);
-        if (previewZoom === 1) {
-            previewLeft = 0;
-            previewTop = 0;
-        }
-        updatePreviewTransform();
-    };
-    
-    document.getElementById("preview-reset").onclick = resetPreviewZoom;
-    
-    // Drag for preview
-    previewImg.onmousedown = (e) => {
-        if (previewZoom <= 1) return;
-        isPreviewDragging = true;
-        previewStartX = e.clientX - previewLeft;
-        previewStartY = e.clientY - previewTop;
-    };
-    
-    window.onmousemove = (e) => {
-        if (!isPreviewDragging) return;
-        previewLeft = e.clientX - previewStartX;
-        previewTop = e.clientY - previewStartY;
-        updatePreviewTransform();
-    };
-    
-    window.onmouseup = () => {
-        isPreviewDragging = false;
-    };
-    
-    // Touch events for preview
-    previewImg.ontouchstart = (e) => {
-        if (previewZoom <= 1) return;
-        const touch = e.touches[0];
-        isPreviewDragging = true;
-        previewStartX = touch.clientX - previewLeft;
-        previewStartY = touch.clientY - previewTop;
-    };
-    
-    window.ontouchmove = (e) => {
-        if (!isPreviewDragging) return;
-        const touch = e.touches[0];
-        previewLeft = touch.clientX - previewStartX;
-        previewTop = touch.clientY - previewStartY;
-        updatePreviewTransform();
-    };
-    
-    window.ontouchend = () => {
-        isPreviewDragging = false;
-    };
-    
-    document.querySelector(".close-preview").onclick = () => {
-        previewModal.style.display = "none";
-        pendingImageData = null;
-    };
-    
-    document.getElementById("cancel-send").onclick = () => {
-        previewModal.style.display = "none";
-        pendingImageData = null;
-        addMessage("❌ Image sending cancelled", "system");
-    };
-    
-    document.getElementById("confirm-send").onclick = () => {
-        previewModal.style.display = "none";
-        if (pendingImageData) {
-            startSmsHandover(pendingImageData, true);
-        }
-    };
-}
-
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    addMessage("📸 Processing image with smart compression...", "system");
+    // Check if it's a text/screenshot - suggest text mode
+    addMessage("📸 Processing image...", "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -296,64 +176,123 @@ fileInput.onchange = (e) => {
         img.onload = () => {
             const canvas = document.createElement("canvas");
             
-            // SMART RESIZING - 800px for good readability
-            const MAX_WIDTH = 800;
+            // Use 600px for text images (smaller = fewer SMS)
+            const MAX_WIDTH = 600;
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
 
             const ctx = canvas.getContext("2d");
             
-            // Draw image normally (preserves colors)
+            // Draw image
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             
-            // Gentle contrast for better text readability
+            // Increase contrast for text readability
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const pixels = imageData.data;
             
+            // Stronger contrast for text (1.3x)
             for (let i = 0; i < pixels.length; i += 4) {
-                pixels[i] = Math.min(255, Math.max(0, (pixels[i] - 128) * 1.1 + 128));
-                pixels[i+1] = Math.min(255, Math.max(0, (pixels[i+1] - 128) * 1.1 + 128));
-                pixels[i+2] = Math.min(255, Math.max(0, (pixels[i+2] - 128) * 1.1 + 128));
+                pixels[i] = Math.min(255, Math.max(0, (pixels[i] - 128) * 1.3 + 128));
+                pixels[i+1] = Math.min(255, Math.max(0, (pixels[i+1] - 128) * 1.3 + 128));
+                pixels[i+2] = Math.min(255, Math.max(0, (pixels[i+2] - 128) * 1.3 + 128));
             }
             ctx.putImageData(imageData, 0, 0);
             
-            // SMART COMPRESSION: Use WebP for smaller files
+            // Compress
             let compressedDataUrl;
-            
             try {
-                compressedDataUrl = canvas.toDataURL("image/webp", 0.65);
+                compressedDataUrl = canvas.toDataURL("image/webp", 0.5);
             } catch(e) {
-                compressedDataUrl = canvas.toDataURL("image/jpeg", 0.75);
+                compressedDataUrl = canvas.toDataURL("image/jpeg", 0.6);
             }
             
             const sizeKB = Math.round(compressedDataUrl.length / 1024);
-            const originalSizeKB = Math.round(file.size / 1024);
             const cost = Math.ceil(compressedDataUrl.length / 2000);
             
-            addMessage(`✨ Image ready: ${sizeKB}KB (was ${originalSizeKB}KB) | ${cost} SMS messages`, "system");
+            addMessage(`✨ Image ready: ${sizeKB}KB | ${cost} SMS messages`, "system");
             
-            if (cost > 12) {
-                const proceed = confirm(`⚠️ This image will take ${cost} SMS messages.\nSize: ${sizeKB}KB\n\nContinue?`);
-                if (!proceed) return;
+            // Ask user if they want to proceed or use text mode
+            if (cost > 10) {
+                const useText = confirm(`⚠️ This will take ${cost} SMS messages.\n\nFor text notes, use "Send as Text" button (1 SMS).\n\nSend as image anyway?`);
+                if (!useText) return;
             }
             
-            // Store for preview
-            pendingImageData = compressedDataUrl;
-            
-            // Show preview with zoom capability
-            showImagePreview(compressedDataUrl, file.size);
+            // Show preview before sending
+            showPreviewAndSend(compressedDataUrl);
         };
         img.src = event.target.result;
     };
     reader.readAsDataURL(file);
 };
 
+// Preview before sending
+function showPreviewAndSend(imageData) {
+    // Create preview div
+    let previewDiv = document.getElementById("image-preview");
+    if (!previewDiv) {
+        previewDiv = document.createElement("div");
+        previewDiv.id = "image-preview";
+        previewDiv.style.cssText = `
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #1e1f22; border-radius: 16px; padding: 20px;
+            z-index: 1000; text-align: center; max-width: 90vw; max-height: 90vh;
+            box-shadow: 0 0 50px rgba(0,0,0,0.9); border: 1px solid #444;
+        `;
+        previewDiv.innerHTML = `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <h3 style="color:white;">Preview Image</h3>
+                <button id="close-preview-btn" style="background:none; border:none; color:white; font-size:24px; cursor:pointer;">&times;</button>
+            </div>
+            <div style="overflow: auto; max-height: 60vh;">
+                <img id="preview-img" style="max-width: 100%; cursor: pointer;">
+            </div>
+            <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: center;">
+                <button id="cancel-send-btn" style="background:#da373c; color:white; border:none; padding: 10px 20px; border-radius: 8px; cursor:pointer;">Cancel</button>
+                <button id="confirm-send-btn" style="background:#23a559; color:white; border:none; padding: 10px 20px; border-radius: 8px; cursor:pointer;">Send Image</button>
+            </div>
+        `;
+        document.body.appendChild(previewDiv);
+    }
+    
+    const previewImg = document.getElementById("preview-img");
+    previewImg.src = imageData;
+    previewDiv.style.display = "block";
+    
+    // Zoom on click
+    let zoomed = false;
+    previewImg.onclick = () => {
+        if (!zoomed) {
+            previewImg.style.transform = "scale(2)";
+            previewImg.style.cursor = "zoom-out";
+            zoomed = true;
+        } else {
+            previewImg.style.transform = "scale(1)";
+            previewImg.style.cursor = "zoom-in";
+            zoomed = false;
+        }
+    };
+    
+    document.getElementById("close-preview-btn").onclick = () => {
+        previewDiv.style.display = "none";
+    };
+    
+    document.getElementById("cancel-send-btn").onclick = () => {
+        previewDiv.style.display = "none";
+        addMessage("❌ Send cancelled", "system");
+    };
+    
+    document.getElementById("confirm-send-btn").onclick = () => {
+        previewDiv.style.display = "none";
+        startSmsHandover(imageData, true);
+    };
+}
+
 // ==========================================
-// 6b. SEND AS TEXT (1 SMS)
+// 6b. SEND AS TEXT (1 SMS, BEST FOR NOTES)
 // ==========================================
 document.getElementById("text-note-btn").onclick = () => {
-    const text = prompt("📝 Enter your notes/text to send:\n\n(1 SMS, perfect quality)");
+    const text = prompt("📝 Paste your notes/text here:\n\n(This sends as text - 1 SMS, perfect quality)\n\nExample: Your textbook notes, study material, etc.");
     if (text && text.trim()) {
         if (!activeFriend) {
             addMessage("⚠️ Select a friend first!", "system");
@@ -365,11 +304,13 @@ document.getElementById("text-note-btn").onclick = () => {
         }
         addMessage(`📝 Sending text (${text.length} characters)...`, "system");
         startSmsHandover(text.trim(), false);
+    } else if (text === "") {
+        addMessage("⚠️ Cannot send empty message", "system");
     }
 };
 
 // ==========================================
-// 7. ZOOM & PAN (For received images - FULLY WORKING)
+// 7. ZOOM & PAN (For received images)
 // ==========================================
 let currentZoom = 1;
 let isDragging = false;
@@ -420,12 +361,9 @@ const endDrag = () => {
     isDragging = false;
 };
 
-// Mouse events
 fullImg.addEventListener("mousedown", startDrag);
 window.addEventListener("mousemove", doDrag);
 window.addEventListener("mouseup", endDrag);
-
-// Touch events
 fullImg.addEventListener("touchstart", startDrag);
 window.addEventListener("touchmove", doDrag, { passive: false });
 window.addEventListener("touchend", endDrag);
@@ -455,7 +393,7 @@ function addMessage(content, type = "sent", isImage = false) {
         const img = document.createElement("img");
         img.src = content;
         img.style.maxWidth = "100%";
-        img.style.maxHeight = "300px";
+        img.style.maxHeight = "250px";
         img.style.borderRadius = "8px";
         img.style.cursor = "pointer";
         img.style.objectFit = "contain";
@@ -465,10 +403,10 @@ function addMessage(content, type = "sent", isImage = false) {
         caption.style.fontSize = "10px";
         caption.style.marginTop = "4px";
         caption.style.opacity = "0.7";
-        caption.innerText = "🔍 Tap image to zoom & pan";
+        caption.innerText = "🔍 Tap to zoom & pan";
         div.appendChild(caption);
-    } else { 
-        div.innerText = content; 
+    } else {
+        div.innerText = content;
     }
     chatThread.appendChild(div);
     chatThread.scrollTop = chatThread.scrollHeight;
@@ -503,7 +441,6 @@ document.getElementById("reset-receiver").onclick = () => {
         reassemblyBuffer = {};
         renderFriends();
         chatThread.innerHTML = '<div class="message system">App reset. Add friends to start.</div>';
-        addMessage("App reset", "system");
     }
 };
 
