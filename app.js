@@ -13,6 +13,7 @@ const packetCounter = document.getElementById("packet-counter");
 const fileInput = document.getElementById("file-input");
 const viewer = document.getElementById("image-viewer");
 const fullImg = document.getElementById("full-image");
+const qualitySelect = document.getElementById("image-quality");
 
 function initApp() {
     renderFriends();
@@ -131,7 +132,7 @@ async function startSmsHandover(data, isImage = false) {
     }
 
     let encrypted = await encryptData(data, password);
-    const chunkSize = 1800; // Slightly smaller for safety
+    const chunkSize = 1800;
     const tId = Math.floor(Math.random() * 9000) + 1000;
     const packets = [];
 
@@ -140,7 +141,8 @@ async function startSmsHandover(data, isImage = false) {
     }
 
     if (isImage) {
-        addMessage(`📸 Image ready: ${packets.length} SMS packets`, "system");
+        const sizeMB = (data.length / (1024 * 1024)).toFixed(2);
+        addMessage(`📸 Image ready: ${packets.length} SMS packets (${sizeMB}MB original)`, "system");
     } else {
         addMessage(data, "sent", false);
     }
@@ -183,8 +185,7 @@ async function processIncoming(rawData) {
         if (!reassemblyBuffer[tId]) reassemblyBuffer[tId] = new Array(tot).fill(null);
         reassemblyBuffer[tId][seq - 1] = data;
 
-        const receivedCount = reassemblyBuffer[tId].filter(x => x !== null).length;
-        addMessage(`📦 Received packet ${seq}/${tot} for transfer ${tId}`, "system");
+        addMessage(`📦 Received packet ${seq}/${tot}`, "system");
 
         if (reassemblyBuffer[tId].filter(x => x !== null).length === tot) {
             addMessage(`🔓 Complete! Reassembling ${tot} packets...`, "system");
@@ -205,13 +206,16 @@ async function processIncoming(rawData) {
 }
 
 // ==========================================
-// 6. SMART IMAGE PROCESSING (Preserves Quality & Color)
+// 6. HIGH QUALITY IMAGE PROCESSING
 // ==========================================
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    addMessage("🎨 Processing image for SMS transmission...", "system");
+    const quality = parseFloat(qualitySelect?.value || 0.9);
+    const qualityLabel = qualitySelect?.options[qualitySelect.selectedIndex]?.text || "High Quality";
+    
+    addMessage(`🎨 Processing image with ${qualityLabel}...`, "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -219,56 +223,53 @@ fileInput.onchange = (e) => {
         img.onload = () => {
             const canvas = document.createElement("canvas");
             
-            // Balanced resizing: 800px width for text readability
-            const MAX_WIDTH = 800;
-            const scaleSize = MAX_WIDTH / img.width;
-            canvas.width = MAX_WIDTH;
-            canvas.height = img.height * scaleSize;
+            // OPTIONAL: Only resize if image is extremely large (>2000px)
+            // This preserves quality while keeping SMS count reasonable
+            let targetWidth = img.width;
+            let targetHeight = img.height;
+            
+            if (img.width > 2000) {
+                const scale = 2000 / img.width;
+                targetWidth = 2000;
+                targetHeight = img.height * scale;
+                addMessage(`📐 Resized from ${img.width}x${img.height} to ${Math.round(targetWidth)}x${Math.round(targetHeight)} (max 2000px)`, "system");
+            } else {
+                addMessage(`📐 Keeping original size: ${img.width}x${img.height}`, "system");
+            }
+            
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
 
             const ctx = canvas.getContext("2d");
             
-            // Draw image WITH color preservation
+            // Draw image WITHOUT any destructive filters
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             
-            // Optional: Light contrast boost for text clarity (preserves color)
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const pixels = imageData.data;
-            
-            // Gentle contrast enhancement for better text readability
-            let totalBrightness = 0;
-            for (let i = 0; i < pixels.length; i += 4) {
-                totalBrightness += (pixels[i] + pixels[i+1] + pixels[i+2]) / 3;
-            }
-            const avgBrightness = totalBrightness / (pixels.length / 4);
-            const contrastFactor = 1.15;
-            
-            for (let i = 0; i < pixels.length; i += 4) {
-                // Gentle contrast adjustment
-                pixels[i] = Math.min(255, Math.max(0, (pixels[i] - avgBrightness) * contrastFactor + avgBrightness));
-                pixels[i+1] = Math.min(255, Math.max(0, (pixels[i+1] - avgBrightness) * contrastFactor + avgBrightness));
-                pixels[i+2] = Math.min(255, Math.max(0, (pixels[i+2] - avgBrightness) * contrastFactor + avgBrightness));
-            }
-            ctx.putImageData(imageData, 0, 0);
-            
-            // Smart compression: WebP preferred for quality/size
+            // NO grayscale, NO aggressive contrast - preserve original colors!
+            // Use PNG for small images with text, JPEG for photos
             let compressedDataUrl;
-            let quality = 0.75;
+            let format = "image/jpeg";
             
-            if (canvas.toDataURL("image/webp", quality).length < canvas.toDataURL("image/jpeg", 0.85).length) {
-                compressedDataUrl = canvas.toDataURL("image/webp", quality);
-                addMessage("📸 Using WebP compression (best quality/size ratio)", "system");
+            // Check if it might be a screenshot/note (PNG works better for text)
+            if (file.type === "image/png" || (img.width * img.height < 500000)) {
+                format = "image/png";
+                compressedDataUrl = canvas.toDataURL(format);
+                addMessage(`📸 Using PNG format (best for text clarity)`, "system");
             } else {
-                compressedDataUrl = canvas.toDataURL("image/jpeg", 0.85);
-                addMessage("📸 Using JPEG compression (high quality)", "system");
+                // Use high quality JPEG
+                compressedDataUrl = canvas.toDataURL(format, quality);
+                addMessage(`📸 Using JPEG at ${Math.round(quality * 100)}% quality`, "system");
             }
             
             const sizeKB = Math.round(compressedDataUrl.length / 1024);
+            const originalSizeKB = Math.round(file.size / 1024);
             const cost = Math.ceil(compressedDataUrl.length / 1800);
             
-            addMessage(`✨ Image ready: ${sizeKB}KB | ${cost} SMS packet${cost > 1 ? 's' : ''}`, "system");
+            addMessage(`✨ Image ready: ${sizeKB}KB (was ${originalSizeKB}KB) | ${cost} SMS packet${cost > 1 ? 's' : ''}`, "system");
             
-            if (cost > 20) {
-                const proceed = confirm(`This image will take ${cost} SMS messages to send. Continue?\n\nTip: Use smaller images for better results.`);
+            // Ask for confirmation only if very large
+            if (cost > 30) {
+                const proceed = confirm(`⚠️ This image will take ${cost} SMS messages to send.\n\nSize: ${sizeKB}KB\n\nContinue? (Cancel to choose a smaller image or lower quality)`);
                 if (!proceed) return;
             }
             
@@ -280,87 +281,155 @@ fileInput.onchange = (e) => {
 };
 
 // ==========================================
-// 6b. TEXT-ONLY MODE for Notes
+// 6b. TEXT-ONLY MODE
 // ==========================================
 document.getElementById("text-note-btn")?.addEventListener("click", () => {
-    const text = prompt("📝 Enter your notes or text to send:\n\n(Tip: Long text will be split into multiple SMS messages)");
+    const text = prompt("📝 Enter your notes or text to send:");
     if (text && text.trim()) {
         if (!activeFriend) {
             addMessage("⚠️ Please select a friend first!", "system");
             return;
         }
+        if (!secretKeyInput.value) {
+            addMessage("⚠️ Please enter a passcode first!", "system");
+            return;
+        }
         addMessage(`📝 Sending text note (${text.length} characters)...`, "system");
         startSmsHandover(text.trim(), false);
-    } else if (text === "") {
-        addMessage("⚠️ Cannot send empty message", "system");
     }
 });
 
 // ==========================================
-// 7. ZOOM & PAN for Image Viewer
+// 7. FULL ZOOM & PAN SYSTEM
 // ==========================================
 let currentZoom = 1;
 let isDragging = false;
-let startX, startY, imgLeft = 0, imgTop = 0;
+let startX, startY, translateX = 0, translateY = 0;
+let initialPinchDistance = null;
+let initialZoom = 1;
 
-function openViewer(src) {
+function updateImageTransform() {
+    fullImg.style.transform = `translate(${translateX}px, ${translateY}px) scale(${currentZoom})`;
+    const zoomPercent = Math.round(currentZoom * 100);
+    const zoomIndicator = document.getElementById("zoom-indicator");
+    if (zoomIndicator) {
+        zoomIndicator.textContent = `${zoomPercent}%`;
+        zoomIndicator.style.opacity = "1";
+        setTimeout(() => {
+            if (zoomIndicator) zoomIndicator.style.opacity = "0";
+        }, 1000);
+    }
+}
+
+function resetZoom() {
+    currentZoom = 1;
+    translateX = 0;
+    translateY = 0;
+    updateImageTransform();
+}
+
+function zoomIn() {
+    currentZoom = Math.min(currentZoom + 0.25, 4);
+    updateImageTransform();
+}
+
+function zoomOut() {
+    currentZoom = Math.max(currentZoom - 0.25, 0.5);
+    if (currentZoom === 1) {
+        translateX = 0;
+        translateY = 0;
+    }
+    updateImageTransform();
+}
+
+function startDrag(e) {
+    if (currentZoom <= 1) return;
+    e.preventDefault();
+    isDragging = true;
+    const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
+    const clientY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
+    startX = clientX - translateX;
+    startY = clientY - translateY;
+}
+
+function doDrag(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+    const clientX = e.clientX ?? (e.touches ? e.touches[0].clientX : 0);
+    const clientY = e.clientY ?? (e.touches ? e.touches[0].clientY : 0);
+    translateX = clientX - startX;
+    translateY = clientY - startY;
+    updateImageTransform();
+}
+
+function endDrag() {
+    isDragging = false;
+}
+
+function handleTouchStart(e) {
+    if (e.touches.length === 2) {
+        e.preventDefault();
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        initialPinchDistance = Math.hypot(
+            touch1.clientX - touch2.clientX,
+            touch1.clientY - touch2.clientY
+        );
+        initialZoom = currentZoom;
+    } else if (e.touches.length === 1) {
+        startDrag(e);
+    }
+}
+
+function handleTouchMove(e) {
+    if (e.touches.length === 2 && initialPinchDistance) {
+        e.preventDefault();
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const currentDistance = Math.hypot(
+            touch1.clientX - touch2.clientX,
+            touch1.clientY - touch2.clientY
+        );
+        const scale = currentDistance / initialPinchDistance;
+        currentZoom = Math.min(Math.max(initialZoom * scale, 0.5), 4);
+        updateImageTransform();
+    } else if (e.touches.length === 1) {
+        doDrag(e);
+    }
+}
+
+function openImageViewer(imageSrc) {
     viewer.style.display = "flex";
-    fullImg.src = src;
+    fullImg.src = imageSrc;
     resetZoom();
 }
 
-window.adjustZoom = (delta) => {
-    currentZoom += delta;
-    if (currentZoom < 1) currentZoom = 1;
-    if (currentZoom > 4) currentZoom = 4;
-    fullImg.style.transform = `scale(${currentZoom})`;
-};
-
-window.resetZoom = () => {
-    currentZoom = 1; 
-    imgLeft = 0; 
-    imgTop = 0;
-    fullImg.style.transform = `scale(1)`;
-    fullImg.style.left = "0px"; 
-    fullImg.style.top = "0px";
-};
-
-const startDrag = (e) => {
-    if (currentZoom <= 1) return;
-    isDragging = true;
-    const event = e.touches ? e.touches[0] : e;
-    startX = event.clientX - imgLeft;
-    startY = event.clientY - imgTop;
-};
-
-const doDrag = (e) => {
-    if (!isDragging) return;
-    e.preventDefault();
-    const event = e.touches ? e.touches[0] : e;
-    imgLeft = event.clientX - startX;
-    imgTop = event.clientY - startY;
-    fullImg.style.left = `${imgLeft}px`;
-    fullImg.style.top = `${imgTop}px`;
-};
-
-fullImg?.addEventListener("mousedown", startDrag);
-fullImg?.addEventListener("touchstart", startDrag);
-window.addEventListener("mousemove", doDrag);
-window.addEventListener("touchmove", doDrag, { passive: false });
-window.addEventListener("mouseup", () => isDragging = false);
-window.addEventListener("touchend", () => isDragging = false);
-
-document.querySelector(".close-viewer")?.addEventListener("click", () => {
+function closeViewer() {
     viewer.style.display = "none";
     resetZoom();
-});
+}
 
-// Download button
+fullImg?.addEventListener("mousedown", startDrag);
+fullImg?.addEventListener("touchstart", handleTouchStart);
+window.addEventListener("mousemove", doDrag);
+window.addEventListener("touchmove", handleTouchMove, { passive: false });
+window.addEventListener("mouseup", endDrag);
+window.addEventListener("touchend", endDrag);
+
+document.getElementById("zoom-in-btn")?.addEventListener("click", zoomIn);
+document.getElementById("zoom-out-btn")?.addEventListener("click", zoomOut);
+document.getElementById("reset-view-btn")?.addEventListener("click", resetZoom);
+document.querySelector(".close-viewer")?.addEventListener("click", closeViewer);
+
 document.getElementById("download-btn")?.addEventListener("click", () => {
-    const link = document.createElement("a");
-    link.download = "vlink-image.jpg";
-    link.href = fullImg.src;
-    link.click();
+    if (fullImg.src) {
+        const link = document.createElement("a");
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+        link.download = `vlink-image-${timestamp}.jpg`;
+        link.href = fullImg.src;
+        link.click();
+        addMessage("💾 Image saved to device", "system");
+    }
 });
 
 // ==========================================
@@ -369,25 +438,28 @@ document.getElementById("download-btn")?.addEventListener("click", () => {
 function addMessage(content, type = "sent", isImage = false) {
     const div = document.createElement("div");
     div.className = `message ${type}`;
+    
     if (isImage && content.startsWith("data:image")) {
         const img = document.createElement("img");
         img.src = content;
         img.style.maxWidth = "100%";
+        img.style.maxHeight = "300px";
         img.style.borderRadius = "12px";
         img.style.cursor = "pointer";
-        img.style.imageRendering = "auto";
-        img.onclick = () => openViewer(content);
+        img.style.objectFit = "contain";
+        img.onclick = () => openImageViewer(content);
         div.appendChild(img);
-        // Add caption
+        
         const caption = document.createElement("div");
         caption.style.fontSize = "10px";
         caption.style.marginTop = "4px";
         caption.style.opacity = "0.7";
-        caption.innerText = "📸 Tap to zoom";
+        caption.innerText = "🔍 Tap image to zoom & pan";
         div.appendChild(caption);
     } else {
         div.innerText = content;
     }
+    
     chatThread.appendChild(div);
     chatThread.scrollTop = chatThread.scrollHeight;
 }
@@ -412,7 +484,6 @@ document.getElementById("chunk-btn")?.addEventListener("click", () => {
     }
 });
 
-// Auto-detect pasted VLINK packets
 importInput?.addEventListener("input", (e) => {
     const val = e.target.value.trim();
     if (val.startsWith("VLINK|")) {
@@ -436,7 +507,6 @@ document.getElementById("show-qr-btn")?.addEventListener("click", () => {
 
 document.getElementById("clear-chat-btn")?.addEventListener("click", () => {
     chatThread.innerHTML = '<div class="message system">💬 Chat cleared. Ready for new messages.</div>';
-    addMessage("Chat history cleared", "system");
 });
 
 document.getElementById("reset-receiver")?.addEventListener("click", () => {
