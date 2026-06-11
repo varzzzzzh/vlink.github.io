@@ -46,11 +46,10 @@
                     </label>
                     <input type="file" id="file-input" style="display:none;" accept="image/*">
                     
-                    <!-- Quality Selector Dropdown -->
                     <select id="image-quality" class="quality-select">
-                        <option value="1.0">📷 Original Quality (Largest)</option>
+                        <option value="1.0">📷 Original Quality</option>
                         <option value="0.95">✨ Excellent Quality</option>
-                        <option value="0.9" selected>🌟 High Quality (Recommended)</option>
+                        <option value="0.9" selected>🌟 High Quality</option>
                         <option value="0.8">📱 Good Quality</option>
                         <option value="0.7">💾 Balanced</option>
                     </select>
@@ -71,7 +70,27 @@
         </main>
     </div>
 
-    <!-- IMAGE VIEWER MODAL -->
+    <!-- IMAGE PREVIEW MODAL (Shows BEFORE sending) -->
+    <div id="preview-modal" class="modal">
+        <span class="close-preview">&times;</span>
+        <div class="modal-content-wrapper" id="preview-wrapper">
+            <img class="modal-content" id="preview-image" draggable="false">
+        </div>
+        <div class="preview-info" id="preview-info">
+            <span id="preview-size">Loading...</span>
+            <span id="preview-packets">Calculating...</span>
+        </div>
+        <div class="viewer-controls">
+            <button id="preview-zoom-in">🔍 Zoom In</button>
+            <button id="preview-zoom-out">🔍 Zoom Out</button>
+            <button id="preview-reset">⟲ Reset</button>
+            <button id="confirm-send-btn" class="send-confirm">✅ Send Image</button>
+            <button id="cancel-send-btn" class="cancel-confirm">❌ Cancel</button>
+        </div>
+        <div class="zoom-indicator" id="preview-zoom-indicator">100%</div>
+    </div>
+
+    <!-- FULL IMAGE VIEWER MODAL (After receiving/clicking) -->
     <div id="image-viewer" class="modal">
         <span class="close-viewer">&times;</span>
         <div class="modal-content-wrapper" id="viewer-wrapper">
