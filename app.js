@@ -5,6 +5,7 @@ let db;
 let reassemblyBuffer = {};
 let activeFriend = null;
 let friends = JSON.parse(localStorage.getItem("vlink_friends")) || [];
+let pendingImageData = null;
 
 const chatThread = document.getElementById("chat-thread");
 const importInput = document.getElementById("import-input");
@@ -63,7 +64,7 @@ document.getElementById("delete-friend-btn").onclick = () => {
         activeFriend = null;
         document.getElementById("chat-target").innerText = "VLink Secure";
         renderFriends();
-        addMessage(`Removed ${activeFriend?.name || "contact"}`, "system");
+        addMessage(`Removed contact`, "system");
     }
 };
 
@@ -153,15 +154,136 @@ async function processIncoming(rawData) {
     if (reassemblyBuffer[tId].filter(x => x !== null).length === tot) {
         try {
             const decrypted = await decryptData(reassemblyBuffer[tId].join(""), password);
-            addMessage(decrypted, "received", decrypted.startsWith("data:image"));
+            const isImage = decrypted.startsWith("data:image");
+            addMessage(decrypted, "received", isImage);
             delete reassemblyBuffer[tId];
         } catch (e) { addMessage("Decryption Error", "system"); }
     }
 }
 
 // ==========================================
-// 6. SMART IMAGE COMPRESSION (Good Quality + Few SMS)
+// 6. SMART IMAGE COMPRESSION with PREVIEW
 // ==========================================
+function showImagePreview(imageDataUrl, fileSize) {
+    // Create preview modal if it doesn't exist
+    let previewModal = document.getElementById("preview-modal");
+    if (!previewModal) {
+        previewModal = document.createElement("div");
+        previewModal.id = "preview-modal";
+        previewModal.className = "modal";
+        previewModal.innerHTML = `
+            <span class="close-preview" style="position:absolute; top:20px; right:25px; color:white; font-size:35px; cursor:pointer;">&times;</span>
+            <div class="modal-content-wrapper" style="flex:1; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+                <img id="preview-img" class="modal-content" style="position:absolute; max-width:90%; cursor:grab;">
+            </div>
+            <div style="padding:15px; display:flex; justify-content:center; gap:10px; background:rgba(0,0,0,0.8);">
+                <button id="preview-zoom-in" style="background:#5865f2; color:white; border:none; padding:10px 18px; border-radius:8px; cursor:pointer;">🔍 Zoom In</button>
+                <button id="preview-zoom-out" style="background:#5865f2; color:white; border:none; padding:10px 18px; border-radius:8px; cursor:pointer;">🔍 Zoom Out</button>
+                <button id="preview-reset" style="background:#5865f2; color:white; border:none; padding:10px 18px; border-radius:8px; cursor:pointer;">⟲ Reset</button>
+                <button id="confirm-send" style="background:#23a559; color:white; border:none; padding:10px 18px; border-radius:8px; cursor:pointer;">✅ Send Image</button>
+                <button id="cancel-send" style="background:#da373c; color:white; border:none; padding:10px 18px; border-radius:8px; cursor:pointer;">❌ Cancel</button>
+            </div>
+        `;
+        document.body.appendChild(previewModal);
+    }
+    
+    const previewImg = document.getElementById("preview-img");
+    previewImg.src = imageDataUrl;
+    previewModal.style.display = "flex";
+    
+    // Preview zoom variables
+    let previewZoom = 1;
+    let isPreviewDragging = false;
+    let previewStartX, previewStartY, previewLeft = 0, previewTop = 0;
+    
+    function updatePreviewTransform() {
+        previewImg.style.transform = `scale(${previewZoom})`;
+        previewImg.style.left = `${previewLeft}px`;
+        previewImg.style.top = `${previewTop}px`;
+    }
+    
+    function resetPreviewZoom() {
+        previewZoom = 1;
+        previewLeft = 0;
+        previewTop = 0;
+        updatePreviewTransform();
+    }
+    
+    document.getElementById("preview-zoom-in").onclick = () => {
+        previewZoom = Math.min(previewZoom + 0.25, 4);
+        updatePreviewTransform();
+    };
+    
+    document.getElementById("preview-zoom-out").onclick = () => {
+        previewZoom = Math.max(previewZoom - 0.25, 0.5);
+        if (previewZoom === 1) {
+            previewLeft = 0;
+            previewTop = 0;
+        }
+        updatePreviewTransform();
+    };
+    
+    document.getElementById("preview-reset").onclick = resetPreviewZoom;
+    
+    // Drag for preview
+    previewImg.onmousedown = (e) => {
+        if (previewZoom <= 1) return;
+        isPreviewDragging = true;
+        previewStartX = e.clientX - previewLeft;
+        previewStartY = e.clientY - previewTop;
+    };
+    
+    window.onmousemove = (e) => {
+        if (!isPreviewDragging) return;
+        previewLeft = e.clientX - previewStartX;
+        previewTop = e.clientY - previewStartY;
+        updatePreviewTransform();
+    };
+    
+    window.onmouseup = () => {
+        isPreviewDragging = false;
+    };
+    
+    // Touch events for preview
+    previewImg.ontouchstart = (e) => {
+        if (previewZoom <= 1) return;
+        const touch = e.touches[0];
+        isPreviewDragging = true;
+        previewStartX = touch.clientX - previewLeft;
+        previewStartY = touch.clientY - previewTop;
+    };
+    
+    window.ontouchmove = (e) => {
+        if (!isPreviewDragging) return;
+        const touch = e.touches[0];
+        previewLeft = touch.clientX - previewStartX;
+        previewTop = touch.clientY - previewStartY;
+        updatePreviewTransform();
+    };
+    
+    window.ontouchend = () => {
+        isPreviewDragging = false;
+    };
+    
+    document.querySelector(".close-preview").onclick = () => {
+        previewModal.style.display = "none";
+        pendingImageData = null;
+    };
+    
+    document.getElementById("cancel-send").onclick = () => {
+        previewModal.style.display = "none";
+        pendingImageData = null;
+        addMessage("❌ Image sending cancelled", "system");
+    };
+    
+    document.getElementById("confirm-send").onclick = () => {
+        previewModal.style.display = "none";
+        if (pendingImageData) {
+            startSmsHandover(pendingImageData, true);
+        }
+    };
+}
+
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -185,11 +307,10 @@ fileInput.onchange = (e) => {
             // Draw image normally (preserves colors)
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             
-            // Optional: Gentle contrast for better text readability
+            // Gentle contrast for better text readability
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const pixels = imageData.data;
             
-            // Gentle contrast boost (1.1x) - helps text without ruining image
             for (let i = 0; i < pixels.length; i += 4) {
                 pixels[i] = Math.min(255, Math.max(0, (pixels[i] - 128) * 1.1 + 128));
                 pixels[i+1] = Math.min(255, Math.max(0, (pixels[i+1] - 128) * 1.1 + 128));
@@ -200,13 +321,10 @@ fileInput.onchange = (e) => {
             // SMART COMPRESSION: Use WebP for smaller files
             let compressedDataUrl;
             
-            // Try WebP first (30% smaller than JPEG)
             try {
                 compressedDataUrl = canvas.toDataURL("image/webp", 0.65);
-                addMessage("🎨 Using WebP compression (better quality/size)", "system");
             } catch(e) {
                 compressedDataUrl = canvas.toDataURL("image/jpeg", 0.75);
-                addMessage("🎨 Using JPEG compression", "system");
             }
             
             const sizeKB = Math.round(compressedDataUrl.length / 1024);
@@ -215,13 +333,16 @@ fileInput.onchange = (e) => {
             
             addMessage(`✨ Image ready: ${sizeKB}KB (was ${originalSizeKB}KB) | ${cost} SMS messages`, "system");
             
-            // Ask user if they want to proceed
             if (cost > 12) {
-                const proceed = confirm(`⚠️ This image will take ${cost} SMS messages.\nSize: ${sizeKB}KB\n\nContinue? (Cancel to choose smaller image)`);
+                const proceed = confirm(`⚠️ This image will take ${cost} SMS messages.\nSize: ${sizeKB}KB\n\nContinue?`);
                 if (!proceed) return;
             }
             
-            startSmsHandover(compressedDataUrl, true);
+            // Store for preview
+            pendingImageData = compressedDataUrl;
+            
+            // Show preview with zoom capability
+            showImagePreview(compressedDataUrl, file.size);
         };
         img.src = event.target.result;
     };
@@ -229,7 +350,7 @@ fileInput.onchange = (e) => {
 };
 
 // ==========================================
-// 6b. SEND AS TEXT (1 SMS, perfect quality)
+// 6b. SEND AS TEXT (1 SMS)
 // ==========================================
 document.getElementById("text-note-btn").onclick = () => {
     const text = prompt("📝 Enter your notes/text to send:\n\n(1 SMS, perfect quality)");
@@ -248,7 +369,7 @@ document.getElementById("text-note-btn").onclick = () => {
 };
 
 // ==========================================
-// 7. ZOOM & PAN
+// 7. ZOOM & PAN (For received images - FULLY WORKING)
 // ==========================================
 let currentZoom = 1;
 let isDragging = false;
@@ -268,9 +389,12 @@ window.adjustZoom = (delta) => {
 };
 
 window.resetZoom = () => {
-    currentZoom = 1; imgLeft = 0; imgTop = 0;
+    currentZoom = 1;
+    imgLeft = 0;
+    imgTop = 0;
     fullImg.style.transform = `scale(1)`;
-    fullImg.style.left = "0px"; fullImg.style.top = "0px";
+    fullImg.style.left = "0px";
+    fullImg.style.top = "0px";
 };
 
 const startDrag = (e) => {
@@ -279,6 +403,7 @@ const startDrag = (e) => {
     const event = e.touches ? e.touches[0] : e;
     startX = event.clientX - imgLeft;
     startY = event.clientY - imgTop;
+    e.preventDefault();
 };
 
 const doDrag = (e) => {
@@ -288,16 +413,27 @@ const doDrag = (e) => {
     imgTop = event.clientY - startY;
     fullImg.style.left = `${imgLeft}px`;
     fullImg.style.top = `${imgTop}px`;
+    e.preventDefault();
 };
 
-fullImg.addEventListener("mousedown", startDrag);
-fullImg.addEventListener("touchstart", startDrag);
-window.addEventListener("mousemove", doDrag);
-window.addEventListener("touchmove", doDrag, { passive: false });
-window.addEventListener("mouseup", () => isDragging = false);
-window.addEventListener("touchend", () => isDragging = false);
+const endDrag = () => {
+    isDragging = false;
+};
 
-document.querySelector(".close-viewer").onclick = () => viewer.style.display = "none";
+// Mouse events
+fullImg.addEventListener("mousedown", startDrag);
+window.addEventListener("mousemove", doDrag);
+window.addEventListener("mouseup", endDrag);
+
+// Touch events
+fullImg.addEventListener("touchstart", startDrag);
+window.addEventListener("touchmove", doDrag, { passive: false });
+window.addEventListener("touchend", endDrag);
+
+document.querySelector(".close-viewer").onclick = () => {
+    viewer.style.display = "none";
+    resetZoom();
+};
 
 document.getElementById("download-btn").onclick = () => {
     if (fullImg.src) {
@@ -315,20 +451,21 @@ document.getElementById("download-btn").onclick = () => {
 function addMessage(content, type = "sent", isImage = false) {
     const div = document.createElement("div");
     div.className = `message ${type}`;
-    if (isImage) {
+    if (isImage && content.startsWith("data:image")) {
         const img = document.createElement("img");
         img.src = content;
         img.style.maxWidth = "100%";
         img.style.maxHeight = "300px";
         img.style.borderRadius = "8px";
         img.style.cursor = "pointer";
+        img.style.objectFit = "contain";
         img.onclick = () => openViewer(content);
         div.appendChild(img);
         const caption = document.createElement("div");
         caption.style.fontSize = "10px";
         caption.style.marginTop = "4px";
         caption.style.opacity = "0.7";
-        caption.innerText = "🔍 Tap to zoom";
+        caption.innerText = "🔍 Tap image to zoom & pan";
         div.appendChild(caption);
     } else { 
         div.innerText = content; 
