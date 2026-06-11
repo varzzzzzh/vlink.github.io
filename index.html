@@ -34,7 +34,7 @@
 
             <div id="chat-thread">
                 <div class="message system">🎓 VLink - Share notes offline via SMS</div>
-                <div class="message system">Tap + to add a friend. Images keep their color and text clarity!</div>
+                <div class="message system">Tap + to add a friend. Tap any image to zoom & pan!</div>
             </div>
 
             <div id="packet-counter" class="hidden">0/0</div>
@@ -45,6 +45,16 @@
                         <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                     </label>
                     <input type="file" id="file-input" style="display:none;" accept="image/*">
+                    
+                    <!-- Quality Selector Dropdown -->
+                    <select id="image-quality" class="quality-select">
+                        <option value="1.0">📷 Original Quality (Largest)</option>
+                        <option value="0.95">✨ Excellent Quality</option>
+                        <option value="0.9" selected>🌟 High Quality (Recommended)</option>
+                        <option value="0.8">📱 Good Quality</option>
+                        <option value="0.7">💾 Balanced</option>
+                    </select>
+                    
                     <button id="text-note-btn" class="icon-btn" title="Send Text Note">
                         <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M4 6h16v2H4V6zm0 4h16v2H4v-2zm0 4h10v2H4v-2zm13 0l4 4-4 4v-3h-4v-2h4v-3z"/></svg>
                     </button>
@@ -61,17 +71,19 @@
         </main>
     </div>
 
+    <!-- IMAGE VIEWER MODAL -->
     <div id="image-viewer" class="modal">
         <span class="close-viewer">&times;</span>
         <div class="modal-content-wrapper" id="viewer-wrapper">
             <img class="modal-content" id="full-image" draggable="false">
         </div>
         <div class="viewer-controls">
-            <button onclick="adjustZoom(0.5)">➕ Zoom In</button>
-            <button onclick="adjustZoom(-0.5)">➖ Zoom Out</button>
-            <button onclick="resetZoom()">⟲ Reset</button>
-            <button id="download-btn">💾 Save Image</button>
+            <button id="zoom-in-btn">🔍 Zoom In</button>
+            <button id="zoom-out-btn">🔍 Zoom Out</button>
+            <button id="reset-view-btn">⟲ Reset</button>
+            <button id="download-btn">💾 Save</button>
         </div>
+        <div class="zoom-indicator" id="zoom-indicator">100%</div>
     </div>
 
     <script src="app.js"></script>
