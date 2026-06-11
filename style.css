@@ -290,7 +290,7 @@ body {
     text-decoration: underline;
 }
 
-/* IMAGE VIEWER MODAL */
+/* MODAL STYLES */
 .modal {
     display: none; 
     position: fixed; 
@@ -303,7 +303,7 @@ body {
     flex-direction: column;
 }
 
-.close-viewer { 
+.close-viewer, .close-preview { 
     position: absolute; 
     top: 20px; 
     right: 25px; 
@@ -346,6 +346,7 @@ body {
     gap: 12px; 
     background: rgba(0,0,0,0.8);
     z-index: 1010;
+    flex-wrap: wrap;
 }
 
 .viewer-controls button { 
@@ -364,6 +365,14 @@ body {
     transform: scale(0.95);
 }
 
+.send-confirm {
+    background: var(--accent-green) !important;
+}
+
+.cancel-confirm {
+    background: var(--accent-red) !important;
+}
+
 .zoom-indicator {
     position: absolute;
     bottom: 80px;
@@ -377,6 +386,21 @@ body {
     font-weight: bold;
     z-index: 1010;
     pointer-events: none;
+}
+
+.preview-info {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0,0,0,0.7);
+    padding: 8px 15px;
+    border-radius: 20px;
+    color: white;
+    font-size: 12px;
+    z-index: 1010;
+    display: flex;
+    gap: 15px;
+    backdrop-filter: blur(5px);
 }
 
 /* QR CODE */
@@ -425,6 +449,12 @@ body {
     .quality-select {
         font-size: 10px;
         padding: 4px 8px;
+    }
+    .preview-info {
+        font-size: 10px;
+        top: 10px;
+        left: 10px;
+        gap: 8px;
     }
 }
 
