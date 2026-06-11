@@ -1,7 +1,7 @@
 {
     "name": "VLink - Offline Note Sharing",
     "short_name": "VLink",
-    "description": "Share notes and images offline via SMS",
+    "description": "Share notes and images offline via SMS with preview & zoom",
     "start_url": ".",
     "display": "standalone",
     "theme_color": "#313338",
