@@ -113,7 +113,9 @@ async function startSmsHandover(data, isImage = false) {
         packets.push(`VLINK|ID:${tId}|SEQ:${Math.floor(i/chunkSize)+1}|TOT:${Math.ceil(encrypted.length/chunkSize)}|DATA:${encrypted.substring(i, i+chunkSize)}`);
     }
 
-    if (!isImage) {
+    if (isImage) {
+        addMessage(`📸 Image ready: ${packets.length} SMS messages`, "system");
+    } else {
         addMessage(data, "sent", false);
     }
     
@@ -129,6 +131,7 @@ async function startSmsHandover(data, isImage = false) {
             else {
                 packetCounter.innerText = "Sent ✓";
                 setTimeout(() => packetCounter.classList.add("hidden"), 3000);
+                addMessage(`✅ Image sent! ${packets.length} SMS messages`, "system");
             }
         };
     };
@@ -161,14 +164,13 @@ async function processIncoming(rawData) {
 }
 
 // ==========================================
-// 6. SMART IMAGE COMPRESSION (Good Quality + Few SMS)
+// 6. AGGRESSIVE COMPRESSION FOR TEXT IMAGES
 // ==========================================
 fileInput.onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Check if it's a text/screenshot - suggest text mode
-    addMessage("📸 Processing image...", "system");
+    addMessage("📸 Compressing image for SMS...", "system");
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -176,49 +178,40 @@ fileInput.onchange = (e) => {
         img.onload = () => {
             const canvas = document.createElement("canvas");
             
-            // Use 600px for text images (smaller = fewer SMS)
-            const MAX_WIDTH = 600;
+            // AGGRESSIVE RESIZE - 400px for text images (fewer SMS)
+            const MAX_WIDTH = 400;
             const scaleSize = MAX_WIDTH / img.width;
             canvas.width = MAX_WIDTH;
             canvas.height = img.height * scaleSize;
 
             const ctx = canvas.getContext("2d");
-            
-            // Draw image
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             
-            // Increase contrast for text readability
+            // Increase contrast for text (makes it sharper)
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const pixels = imageData.data;
-            
-            // Stronger contrast for text (1.3x)
             for (let i = 0; i < pixels.length; i += 4) {
-                pixels[i] = Math.min(255, Math.max(0, (pixels[i] - 128) * 1.3 + 128));
-                pixels[i+1] = Math.min(255, Math.max(0, (pixels[i+1] - 128) * 1.3 + 128));
-                pixels[i+2] = Math.min(255, Math.max(0, (pixels[i+2] - 128) * 1.3 + 128));
+                // Strong contrast for text
+                pixels[i] = Math.min(255, Math.max(0, (pixels[i] - 128) * 1.4 + 128));
+                pixels[i+1] = Math.min(255, Math.max(0, (pixels[i+1] - 128) * 1.4 + 128));
+                pixels[i+2] = Math.min(255, Math.max(0, (pixels[i+2] - 128) * 1.4 + 128));
             }
             ctx.putImageData(imageData, 0, 0);
             
-            // Compress
-            let compressedDataUrl;
-            try {
-                compressedDataUrl = canvas.toDataURL("image/webp", 0.5);
-            } catch(e) {
-                compressedDataUrl = canvas.toDataURL("image/jpeg", 0.6);
-            }
+            // AGGRESSIVE JPEG COMPRESSION
+            const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.5);
             
             const sizeKB = Math.round(compressedDataUrl.length / 1024);
             const cost = Math.ceil(compressedDataUrl.length / 2000);
             
-            addMessage(`✨ Image ready: ${sizeKB}KB | ${cost} SMS messages`, "system");
+            addMessage(`✨ Image compressed: ${sizeKB}KB | ${cost} SMS messages`, "system");
             
-            // Ask user if they want to proceed or use text mode
-            if (cost > 10) {
-                const useText = confirm(`⚠️ This will take ${cost} SMS messages.\n\nFor text notes, use "Send as Text" button (1 SMS).\n\nSend as image anyway?`);
-                if (!useText) return;
+            if (cost > 15) {
+                const proceed = confirm(`⚠️ This will take ${cost} SMS messages.\n\nFor text notes, please use the "Send as Text" option instead.\n\nContinue anyway?`);
+                if (!proceed) return;
             }
             
-            // Show preview before sending
+            // Show preview and send
             showPreviewAndSend(compressedDataUrl);
         };
         img.src = event.target.result;
@@ -228,7 +221,6 @@ fileInput.onchange = (e) => {
 
 // Preview before sending
 function showPreviewAndSend(imageData) {
-    // Create preview div
     let previewDiv = document.getElementById("image-preview");
     if (!previewDiv) {
         previewDiv = document.createElement("div");
@@ -236,21 +228,22 @@ function showPreviewAndSend(imageData) {
         previewDiv.style.cssText = `
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: #1e1f22; border-radius: 16px; padding: 20px;
-            z-index: 1000; text-align: center; max-width: 90vw; max-height: 90vh;
-            box-shadow: 0 0 50px rgba(0,0,0,0.9); border: 1px solid #444;
+            z-index: 10000; text-align: center; max-width: 90vw;
+            box-shadow: 0 0 50px rgba(0,0,0,0.9); border: 2px solid #5865f2;
         `;
         previewDiv.innerHTML = `
-            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                <h3 style="color:white;">Preview Image</h3>
-                <button id="close-preview-btn" style="background:none; border:none; color:white; font-size:24px; cursor:pointer;">&times;</button>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                <h3 style="color:white;">📷 Preview Image</h3>
+                <button id="close-preview" style="background:none; border:none; color:white; font-size:24px; cursor:pointer;">&times;</button>
             </div>
-            <div style="overflow: auto; max-height: 60vh;">
-                <img id="preview-img" style="max-width: 100%; cursor: pointer;">
+            <div style="overflow: auto; max-height: 50vh;">
+                <img id="preview-img" style="max-width: 100%; border-radius: 8px;">
             </div>
             <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: center;">
-                <button id="cancel-send-btn" style="background:#da373c; color:white; border:none; padding: 10px 20px; border-radius: 8px; cursor:pointer;">Cancel</button>
-                <button id="confirm-send-btn" style="background:#23a559; color:white; border:none; padding: 10px 20px; border-radius: 8px; cursor:pointer;">Send Image</button>
+                <button id="cancel-send" style="background:#da373c; color:white; border:none; padding: 10px 20px; border-radius: 8px; cursor:pointer;">❌ Cancel</button>
+                <button id="confirm-send" style="background:#23a559; color:white; border:none; padding: 10px 20px; border-radius: 8px; cursor:pointer;">✅ Send Image</button>
             </div>
+            <p style="color:#949ba4; font-size: 11px; margin-top: 10px;">👆 Image will be viewable with zoom</p>
         `;
         document.body.appendChild(previewDiv);
     }
@@ -259,58 +252,23 @@ function showPreviewAndSend(imageData) {
     previewImg.src = imageData;
     previewDiv.style.display = "block";
     
-    // Zoom on click
-    let zoomed = false;
-    previewImg.onclick = () => {
-        if (!zoomed) {
-            previewImg.style.transform = "scale(2)";
-            previewImg.style.cursor = "zoom-out";
-            zoomed = true;
-        } else {
-            previewImg.style.transform = "scale(1)";
-            previewImg.style.cursor = "zoom-in";
-            zoomed = false;
-        }
-    };
-    
-    document.getElementById("close-preview-btn").onclick = () => {
+    document.getElementById("close-preview").onclick = () => {
         previewDiv.style.display = "none";
     };
     
-    document.getElementById("cancel-send-btn").onclick = () => {
+    document.getElementById("cancel-send").onclick = () => {
         previewDiv.style.display = "none";
         addMessage("❌ Send cancelled", "system");
     };
     
-    document.getElementById("confirm-send-btn").onclick = () => {
+    document.getElementById("confirm-send").onclick = () => {
         previewDiv.style.display = "none";
         startSmsHandover(imageData, true);
     };
 }
 
 // ==========================================
-// 6b. SEND AS TEXT (1 SMS, BEST FOR NOTES)
-// ==========================================
-document.getElementById("text-note-btn").onclick = () => {
-    const text = prompt("📝 Paste your notes/text here:\n\n(This sends as text - 1 SMS, perfect quality)\n\nExample: Your textbook notes, study material, etc.");
-    if (text && text.trim()) {
-        if (!activeFriend) {
-            addMessage("⚠️ Select a friend first!", "system");
-            return;
-        }
-        if (!secretKeyInput.value) {
-            addMessage("⚠️ Enter passcode first!", "system");
-            return;
-        }
-        addMessage(`📝 Sending text (${text.length} characters)...`, "system");
-        startSmsHandover(text.trim(), false);
-    } else if (text === "") {
-        addMessage("⚠️ Cannot send empty message", "system");
-    }
-};
-
-// ==========================================
-// 7. ZOOM & PAN (For received images)
+// 7. ZOOM & PAN (FULLY WORKING)
 // ==========================================
 let currentZoom = 1;
 let isDragging = false;
@@ -384,19 +342,51 @@ document.getElementById("download-btn").onclick = () => {
 };
 
 // ==========================================
-// 8. HELPERS
+// 8. ADD TEXT SEND BUTTON
+// ==========================================
+// Add a text send button dynamically
+const textBtn = document.createElement("button");
+textBtn.id = "text-send-btn";
+textBtn.innerHTML = "📝";
+textBtn.title = "Send as Text (1 SMS)";
+textBtn.style.cssText = "background:none; border:none; color:var(--accent-green); cursor:pointer; font-size:20px; padding:8px;";
+const inputArea = document.querySelector(".chat-input-area");
+if (inputArea && !document.getElementById("text-send-btn")) {
+    inputArea.insertBefore(textBtn, document.getElementById("chunk-btn"));
+}
+
+document.getElementById("text-send-btn").onclick = () => {
+    const text = prompt("📝 PASTE YOUR NOTES HERE:\n\n(This sends as TEXT - 1 SMS, perfect quality!)\n\nExample: Your textbook notes, study material, etc.");
+    if (text && text.trim()) {
+        if (!activeFriend) {
+            addMessage("⚠️ Select a friend first!", "system");
+            return;
+        }
+        if (!secretKeyInput.value) {
+            addMessage("⚠️ Enter passcode first!", "system");
+            return;
+        }
+        addMessage(`📝 Sending text (${text.length} characters)...`, "system");
+        startSmsHandover(text.trim(), false);
+    } else if (text === "") {
+        addMessage("⚠️ Cannot send empty message", "system");
+    }
+};
+
+// ==========================================
+// 9. HELPERS
 // ==========================================
 function addMessage(content, type = "sent", isImage = false) {
     const div = document.createElement("div");
     div.className = `message ${type}`;
-    if (isImage && content.startsWith("data:image")) {
+    if (isImage && content && content.startsWith("data:image")) {
         const img = document.createElement("img");
         img.src = content;
-        img.style.maxWidth = "100%";
-        img.style.maxHeight = "250px";
+        img.style.maxWidth = "200px";
+        img.style.maxHeight = "200px";
         img.style.borderRadius = "8px";
         img.style.cursor = "pointer";
-        img.style.objectFit = "contain";
+        img.style.objectFit = "cover";
         img.onclick = () => openViewer(content);
         div.appendChild(img);
         const caption = document.createElement("div");
