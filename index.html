@@ -5,9 +5,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>VLink Mobile - Share Notes Offline</title>
+    <title>VLink Mobile - Smart Compression</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="manifest" href="manifest.json">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
@@ -25,84 +24,55 @@
                     <span id="status" style="font-size: 10px; color: var(--accent-green);">● Secure</span>
                 </div>
                 <div style="display: flex; gap: 8px;">
-                    <input type="password" id="secret-key" placeholder="Key" style="width: 80px; background: #1e1f22; border: 1px solid #444; color: white; border-radius: 4px; padding: 4px 8px; font-size: 12px;">
-                    <button id="show-qr-btn" style="background:none; border:none; color:white; font-size: 12px; cursor:pointer;">QR</button>
+                    <input type="password" id="secret-key" placeholder="Key" style="width: 60px; background: #1e1f22; border: 1px solid #444; color: white; border-radius: 4px; padding: 2px 5px; font-size: 12px;">
+                    <button id="show-qr-btn" style="background:none; border:none; color:white; font-size: 12px;">QR</button>
                 </div>
             </header>
 
             <div id="qrcode" class="hidden"></div>
 
             <div id="chat-thread">
-                <div class="message system">🎓 VLink - Share notes offline via SMS</div>
-                <div class="message system">Tap + to add a friend. Tap any image to zoom & pan!</div>
+                <div class="message system">📱 VLink - Smart Compression</div>
+                <div class="message system">Tap + to add a friend. Images keep color & clarity!</div>
             </div>
 
             <div id="packet-counter" class="hidden">0/0</div>
 
             <footer>
                 <div class="chat-input-area">
-                    <label for="file-input" class="icon-btn" title="Send Image">
+                    <label for="file-input" style="cursor:pointer; color:var(--text-muted);" title="Send Image">
                         <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                     </label>
                     <input type="file" id="file-input" style="display:none;" accept="image/*">
                     
-                    <select id="image-quality" class="quality-select">
-                        <option value="1.0">📷 Original Quality</option>
-                        <option value="0.95">✨ Excellent Quality</option>
-                        <option value="0.9" selected>🌟 High Quality</option>
-                        <option value="0.8">📱 Good Quality</option>
-                        <option value="0.7">💾 Balanced</option>
-                    </select>
-                    
-                    <button id="text-note-btn" class="icon-btn" title="Send Text Note">
+                    <button id="text-note-btn" style="background:none; border:none; color:var(--accent-green); cursor:pointer;" title="Send as Text (1 SMS)">
                         <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M4 6h16v2H4V6zm0 4h16v2H4v-2zm0 4h10v2H4v-2zm13 0l4 4-4 4v-3h-4v-2h4v-3z"/></svg>
                     </button>
-                    <textarea id="import-input" placeholder="Type a message or paste VLINK| packet..."></textarea>
-                    <button id="chunk-btn" class="send-btn" title="Send Message">
+                    
+                    <textarea id="import-input" placeholder="Message..."></textarea>
+                    <button id="chunk-btn" class="send-btn">
                         <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                     </button>
                 </div>
                 <div class="util-bar">
-                    <button id="clear-chat-btn">Clear Chat</button>
-                    <button id="reset-receiver" style="color:var(--accent-red);">Reset App</button>
+                    <button id="clear-chat-btn">Clear Thread</button>
+                    <button id="reset-receiver" style="color:var(--accent-red);">Wipe App</button>
                 </div>
             </footer>
         </main>
     </div>
 
-    <!-- IMAGE PREVIEW MODAL (Shows BEFORE sending) -->
-    <div id="preview-modal" class="modal">
-        <span class="close-preview">&times;</span>
-        <div class="modal-content-wrapper" id="preview-wrapper">
-            <img class="modal-content" id="preview-image" draggable="false">
-        </div>
-        <div class="preview-info" id="preview-info">
-            <span id="preview-size">Loading...</span>
-            <span id="preview-packets">Calculating...</span>
-        </div>
-        <div class="viewer-controls">
-            <button id="preview-zoom-in">🔍 Zoom In</button>
-            <button id="preview-zoom-out">🔍 Zoom Out</button>
-            <button id="preview-reset">⟲ Reset</button>
-            <button id="confirm-send-btn" class="send-confirm">✅ Send Image</button>
-            <button id="cancel-send-btn" class="cancel-confirm">❌ Cancel</button>
-        </div>
-        <div class="zoom-indicator" id="preview-zoom-indicator">100%</div>
-    </div>
-
-    <!-- FULL IMAGE VIEWER MODAL (After receiving/clicking) -->
     <div id="image-viewer" class="modal">
         <span class="close-viewer">&times;</span>
         <div class="modal-content-wrapper" id="viewer-wrapper">
             <img class="modal-content" id="full-image" draggable="false">
         </div>
         <div class="viewer-controls">
-            <button id="zoom-in-btn">🔍 Zoom In</button>
-            <button id="zoom-out-btn">🔍 Zoom Out</button>
-            <button id="reset-view-btn">⟲ Reset</button>
+            <button onclick="adjustZoom(0.5)">＋</button>
+            <button onclick="adjustZoom(-0.5)">－</button>
+            <button onclick="resetZoom()">⟲</button>
             <button id="download-btn">💾 Save</button>
         </div>
-        <div class="zoom-indicator" id="zoom-indicator">100%</div>
     </div>
 
     <script src="app.js"></script>
